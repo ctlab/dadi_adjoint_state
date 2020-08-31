@@ -13,8 +13,6 @@ from scipy.optimize import BFGS
 
 #: Controls timestep for integrations. This is a reasonable default for
 #: gridsizes of ~60. See set_timescale_factor for better control.
-
-
 timescale_factor = 1e-3
 
 #: Whether to use old timestep method, which is old_timescale_factor * dx[0].
@@ -23,7 +21,7 @@ use_old_timestep = False
 old_timescale_factor = 0.1
 
 #: Controls use of Chang and Cooper's delj trick, which seems to lower accuracy.
-use_delj_trick = True
+use_delj_trick = False
 
 
 def simple_grid(pts):
@@ -152,9 +150,9 @@ def _compute_dt(dx, nu, ms, gamma, h):
     return dt
 
 
-def calc_injected_and_next_phi(previous_phi, trans_matrix, this_dt, xx, theta0):
+def calc_injected_and_next_phi(previous_phi, tridiag_matrix, this_dt, xx, theta0):
     injected_phi = _inject_mutations_1D(previous_phi, this_dt, xx, theta0)
-    next_phi = np.matmul(scipy.linalg.inv(trans_matrix), injected_phi)
+    next_phi = np.matmul(np.linalg.inv(tridiag_matrix), injected_phi) #scipy.linalg.inv(tridiag_matrix)
     return injected_phi, next_phi
 
 
@@ -271,7 +269,7 @@ def feedforward(theta, previous_phi, tridiag_matrix, inverse_tridiag, xx, ns, dx
     dtridiag_dh = calc_dtridiag_dh(dfactor, dMdh_Int, M, dx, delj)
     dtridiagdTheta = get_dtridiagdTheta(dtridiag_dnu, dtridiag_dbeta, dtridiag_dgamma, dtridiag_dh)
     dtridiag_inverse_dTheta = get_dtridiag_inverse_dTheta(inverse_tridiag, dtridiagdTheta)
-    dFdtheta = np.zeros((dtridiag_inverse_dTheta.shape[0], ns[0]))
+    dFdtheta = np.zeros([dtridiag_inverse_dTheta.shape[0], ns[0]], dtype=float)
 
     dt = _compute_dt(dx, nu, [0], gamma, h)
     current_t = initial_t
@@ -300,38 +298,52 @@ def calc_target_grad(dFdtheta, adjoint_field):
     return target_grad
 
 
-def calc_model_AFS(phi, xx, ns):
+def _from_phi_1D_direct(phi, n, xx, mask_corners=True,
+                        het_ascertained=None):
     """
-        Compute sample spectrum from population frequency distribution phi.
-        ns: Sequence of P sample sizes for each population.
-        xx: Sequence of P one-dimensional grids on which phi is defined.
+    Compute sample Spectrum from population frequency distribution phi.
+    ns: Sequence of P sample sizes for each population.
+    xx: Sequence of P one-dimensional grids on which phi is defined.
+    See from_phi for explanation of arguments.
     """
-    model_AFS = np.zeros(ns)
-    for ii in range(0, ns):
-        factorx = scipy.special.comb(ns, ii) * xx ** ii * (1 - xx) ** (ns - ii)
-        model_AFS[ii] = trapz(factorx * phi)
-    return model_AFS
+    n = round(n)
+    data = np.zeros(n + 1)
+    for ii in range(0, n + 1):
+        factorx = scipy.special.comb(n, ii) * xx ** ii * (1 - xx) ** (n - ii)
+        if het_ascertained == 'xx':
+            factorx *= xx * (1 - xx)
+        data[ii] = trapz(factorx * phi, xx)
+    return dadi.Spectrum(data, mask_corners=mask_corners)
 
+def _from_phi_1D_direct_dphi(n, xx, mask_corners=True,
+                        het_ascertained=None):
+    """
+    Compute sample Spectrum from population frequency distribution phi.
 
-def calc_dmodel_AFS_dphi(xx, ns):
-    """  """
-    deriv_model_AFS = np.zeros(ns)
-    for ii in range(0, ns):
-        factorx = scipy.special.comb(ns, ii) * xx ** ii * (1 - xx) ** (ns - ii)
-        deriv_model_AFS[ii] = trapz(factorx)
-    return deriv_model_AFS
+    See from_phi for explanation of arguments.
+    """
+    n = round(n)
+    data = np.zeros(n + 1)
+    for ii in range(0, n + 1):
+        factorx = scipy.special.comb(n, ii) * xx ** ii * (1 - xx) ** (n - ii)
+        if het_ascertained == 'xx':
+            factorx *= xx * (1 - xx)
+        data[ii] = trapz(factorx, xx)
+    return dadi.Spectrum(data, mask_corners=mask_corners)
+
 
 def calc_objective_func(phi, xx, ns, observed_spectrum):
-    model = calc_model_AFS(phi, xx, ns)
-    obj_func = observed_spectrum[1:] * np.log(model) - model - np.log(observed_spectrum[1:])
+    model = _from_phi_1D_direct(phi, ns, xx)
+    obj_func = observed_spectrum * np.log(model) - model - np.log(observed_spectrum)
     return obj_func
 
 def calc_objective_func_from_theta(theta, initial_phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, observed_spectrum,
                                        T, theta0, initial_t, delj):
-    phi, _ = feedforward(theta, initial_phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=3, theta0=1, initial_t=0, delj=delj)
-    model = calc_model_AFS(phi, xx, ns[0])
+    phi, _ = feedforward(theta, initial_phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=T, theta0=theta0,
+                         initial_t=initial_t, delj=delj)
+    model = _from_phi_1D_direct(phi, ns[0], xx)
 
-    obj_func = observed_spectrum[1:] * np.log(model) - model - np.log(observed_spectrum[1:])
+    obj_func = observed_spectrum * np.log(model) - model - np.log(observed_spectrum)
     return obj_func
 
 
@@ -344,14 +356,14 @@ def dfunctionalF_dphi(ns):
     return -1 * np.ones(ns)
 
 
-def ascent(theta, dFdtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx,dfactor, T=3, theta0=1, initial_t=0):
+def ascent(theta, dFdtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T, theta0=1, initial_t=0):
     learning_rate = 0.1
     target_grad = calc_target_grad(dFdtheta, adjoint_field)
     for i in range(10):
     #while np.linalg.norm(target_grad) >= 0.5:
         theta_optimized = theta + learning_rate * target_grad
         theta = theta_optimized
-        phi, dFdtheta = feedforward(theta, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=20, theta0=1,
+        phi, dFdtheta = feedforward(theta, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=T, theta0=1,
                                     initial_t=0)
         target_grad = calc_target_grad(dFdtheta, adjoint_field)
         #logging.debug("theta: {0}".format(theta))
@@ -370,13 +382,13 @@ def plot_function(func_output):
     plt.show()
 
 
-def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi):
+def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi, T):
     logger = logging.getLogger()
     logger.setLevel(10)
     #logging.basicConfig(format='[%(asctime)s] %(levelname).1s %(message)s', level=logging.DEBUG)
 
-    logger.debug("observed spectrum: {0}\n, xx: {1}\n, nu: {2}\n, gamma: {3}\n,"
-                  " h: {4}\n, beta: {5}\n, initial_phi: {6}\n".format(observed_spectrum, xx, nu, gamma, h, beta, initial_phi))
+    logger.debug("observed spectrum: {0}\n xx: {1}\n nu: {2}\n gamma: {3}\n"
+                  " h: {4}\n beta: {5}\n initial_phi: {6}\n".format(observed_spectrum, xx, nu, gamma, h, beta, initial_phi))
 
 
     theta = np.array([nu, gamma, h, beta])
@@ -385,35 +397,33 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi):
     MInt = _Mfunc1D((xx[:-1] + xx[1:]) / 2, gamma, h)
     dMdgamma = _Mfunc1D_dgamma((xx[:-1] + xx[1:]) / 2, h)  # Int
     dMdh = _Mfunc1D_dh((xx[:-1] + xx[1:]) / 2, gamma)  # Int
-    logging.debug("M: {0},\n MInt: {1},\n dMdgamma: {2},\n dMdh: {3}".format(M, MInt, dMdgamma, dMdh))
+    logging.debug("M: {0}\n MInt: {1}\n dMdgamma: {2}\n dMdh: {3}".format(M, MInt, dMdgamma, dMdh))
 
     V = _Vfunc(xx, nu, beta)
     VInt = _Vfunc((xx[:-1] + xx[1:]) / 2, nu, beta=beta)
     dVdnu = _Vfunc_dnu(xx, nu, beta)
     dVdbeta = _Vfunc_dbeta(xx, nu, beta)
-    logging.debug("V: {0} \n, dVdnu: {1} \n, dVdbeta: {2} \n".format(V, dVdnu, dVdbeta))
+    logging.debug("V: {0} \n dVdnu: {1} \n dVdbeta: {2} \n".format(V, dVdnu, dVdbeta))
     dx = np.diff(xx)
     dfactor = _compute_dfactor(dx)
     delj = _compute_delj(dx, MInt, VInt)
     logging.debug("delj: {0}".format(delj))
     tridiag = calc_tridiag_matrix(dfactor, MInt, M, V, dx, delj)
-    logging.debug("dfactor: {0}\n, tridiag: \n {1}, determinant: {2}".format(dfactor, tridiag, np.linalg.det(tridiag)))
+    logging.debug("dfactor: {0}\n tridiag: \n {1} determinant: {2}".format(dfactor, tridiag, np.linalg.det(tridiag)))
     inverse_tridiag = calc_inverse_tridiag_matrix(tridiag)
-    logging.debug("inverse_tridiag: \n {0}, shape {1} \n".format(inverse_tridiag, inverse_tridiag.shape))
+    logging.debug("inverse_tridiag: \n {0} \n shape {1} \n".format(inverse_tridiag, inverse_tridiag.shape))
 
-    phi, dFdtheta = feedforward(theta, initial_phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=20, theta0=1,
+    phi, dFdtheta = feedforward(theta, initial_phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=T, theta0=1,
                                 initial_t=0, delj=delj)
-    logging.debug("phi from feedforward: {0}\n, dFdtheta (third derivative for ASM): \n {1}".format(phi, dFdtheta))
-
-    model_AFS = calc_model_AFS(phi, xx, ns[0])
-    logging.debug("model AFS - spectrum from phi: {0}\n".format(model_AFS))
-    derivative_model_AFS = calc_dmodel_AFS_dphi(xx, ns[0])
-    logging.debug("derivative from model AFS - (first derivative for ASM): {0}\n".format(derivative_model_AFS))
+    logging.debug("phi from feedforward: {0}\n dFdtheta (third derivative for ASM): \n {1}".format(phi, dFdtheta))
+    fs = _from_phi_1D_direct(phi, ns[0], xx)
+    logging.debug("AFS _from_phi_1D_analytic: {0}\n".format(fs))
+    derivative_fs = _from_phi_1D_direct_dphi(ns[0], xx)
+    logging.debug("derivative from AFS - (first derivative for ASM): {0}\n".format(derivative_fs))
     dFdphi = dfunctionalF_dphi(ns[0])
     logging.debug("dFdphi - (second derivative for ASM): {0}\n".format(dFdphi))
 
-
-    adjoint_field = np.full(ns, np.matmul(dFdphi.T, derivative_model_AFS))
+    adjoint_field = np.full(ns, np.matmul(dFdphi.T, np.asarray(derivative_fs)[1:]))
     logging.debug("adjoint-state lagrange multipliers: {0}".format(adjoint_field))
     target_grad = calc_target_grad(dFdtheta, adjoint_field)
     logging.debug("target_grad: {0}\n".format(target_grad))
@@ -421,108 +431,62 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi):
     objective_functional = calc_objective_func(phi, xx, ns[0], observed_spectrum)
     logging.debug("objective_functional: {0}\n".format(objective_functional))
     objective_functional_from_theta = calc_objective_func_from_theta(theta, initial_phi, tridiag, inverse_tridiag, xx,
-                                                                     ns, dx, dfactor, observed_spectrum, T=20, theta0=1,
+                                                                     ns, dx, dfactor, observed_spectrum, T=T, theta0=1,
                                                                     initial_t=0, delj=delj)
     logging.debug("objective_functional_from_theta: {0}\n".format(objective_functional_from_theta))
-
-
-    theta_opt = ascent(theta, dFdtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor)
+    theta_opt = ascent(theta, dFdtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor,T)
     logging.debug("theta_opt: {0}".format(theta_opt))
     print(len(observed_spectrum))
     opt_res = scipy.optimize.minimize(calc_objective_func_from_theta, theta,
                                                               (initial_phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor,
-                                                                observed_spectrum, 20, 1, 0, delj))
+                                                                observed_spectrum, T, 1, 0, delj))
     logging.debug("opt_res item: {0}".format(opt_res.item()))
     logging.debug("opt_res: {0}".format(opt_res))
 
 
-    #plot_function(V)
-    #plot_function(M)
-
-
 if __name__ == "__main__":
-    os.getcwd()
-    print(os.getcwd())
+    """
+    ns: Sample size of resulting Spectrum
+    pts: Number of grid points to use in integration.
+    """
     data = dadi.Spectrum.from_file('fs_data.fs')#(os.path.join(os.getcwd(), '/adjoint_state_method/fs_data.fs'))
-    ns = data.sample_sizes
+    ns = data.sample_sizes #mask corners
     print("ns", ns)
-    xx = dadi.Numerics.default_grid(ns[0])
-    #xx = simple_grid(ns)
-    nu = 0.01 #population size 0.01, 1.0, 0.005, 0.05
-    gamma = 1 #Selection coefficient
-    """The selection coefficient (s) of a given genotype as related to the fitness or
-     adaptive value (W) of that genotype is defined as s = 1 - W. (Fitness is the
-      relative probability that a genotype will reproduce.)"""
-    h = 0.005  # dominance coefficient
-    beta = 0.05 #Breeding ratio (The sex ratio is the ratio of males to females in a population)
+    pts = 19
+    xx = dadi.Numerics.default_grid(pts)
+    nu = 2 # population size
+    gamma = 0.5 # Selection coefficient
+    """
+    The selection coefficient (s) of a given genotype as related to the fitness or
+    adaptive value (W) of that genotype is defined as s = 1 - W. (Fitness is the
+    relative probability that a genotype will reproduce.)"""
+    h = 0.5  # dominance coefficient
+    """
+    Genetics. 2011 Feb; 187(2): 553–566.
+    doi: 10.1534/genetics.110.124560
+        
+    We use h to indicate the dominance coefficient of the allele,
+    the proportion of fitness effect expressed in the homozygote.
+    Thus, a heterozygote would have fitness on average equal to
+    1 – hs times the fitness of the wild-type homozygote. If
+    h = 0, the heterozygote has fitness equal to that of the 
+    wild-type heterozygote, while if h = 1, then the heterozygote 
+    has fitness equal to that of the mutant homozygote. In practice 
+    h can be negative (indicating overdominance if the mutant allele
+    is deleterious), between 0 and 1 as discussed above or even >1
+    with underdominance.
+    """
+    beta = 1 # Breeding ratio (The sex ratio is the ratio of males to females in a population)
     """beta: Breeding ratio, beta = Nf / Nm.
     alpha: Male to female mutation rate ratio, beta = mu_m / mu_f."""
-    initial_phi = dadi.PhiManip.phi_1D(xx, nu, theta0=1.0, gamma=1, h=0.005, theta=None, beta=0.05)
+    initial_phi = dadi.PhiManip.phi_1D(xx, nu, theta0=1.0, gamma=1, h=0.5, theta=None, beta=1)
+    T = 3
 
     try:
-        main(data, ns, xx, nu, gamma, h, beta, initial_phi)
+        main(data, ns, xx, nu, gamma, h, beta, initial_phi, T)
     except:
         logging.exception("Unexpected error")
-"""
-pts = 3
-xx = simple_grid(pts)
-initial_phi = np.array([0.3, 0.4, 0.5])
-ns = len(initial_phi)
 
-nu = 1
-gamma = 5
-h = 0.5 #dominance
-beta = 1
-M = _Mfunc1D(xx, gamma, h)
-MInt = _Mfunc1D((xx[:-1] + xx[1:]) / 2, gamma, h)
-dMdgamma = _Mfunc1D_dgamma((xx[:-1] + xx[1:]) / 2, h) # Int
-dMdh = _Mfunc1D_dh((xx[:-1] + xx[1:]) / 2, gamma) #Int
-print("M", M, "dMdgamma", dMdgamma, "dMdh", dMdh)
-V = _Vfunc(xx, nu, beta)
-#VInt = _Vfunc((xx[:-1] + xx[1:]) / 2, nu, beta=beta)
-dVdnu = _Vfunc_dnu(xx, nu, beta)
-dVdbeta = _Vfunc_dnu(xx, nu, beta)
-print("V", V, "dVdnu", dVdnu, "dVdbeta", dVdbeta)
-dx = np.diff(xx)
-dfactor = _compute_dfactor(dx)
-#delj = _compute_delj(dx, M, V) #MInt, VInt)
-
-tridiag = calc_tridiag_matrix(dfactor, MInt, M, V, dx)
-print("dfactor", dfactor, "tridiag", tridiag, "determinant", np.linalg.det(tridiag))
-inverse_tridiag = calc_inverse_tridiag_matrix(tridiag)
-print("inverse_tridiag", inverse_tridiag)
-dtridiag_dnu = calc_dtridiag_dnu(dfactor, dVdnu, dx, M)
-dtridiag_dbeta = calc_dtridiag_dbeta(dfactor, dVdbeta, dx)
-print("dtridiag_dnu", dtridiag_dnu, "determinant", np.linalg.det(dtridiag_dnu), "dtridiag_dbeta",
-      dtridiag_dbeta, "determinant", np.linalg.det(dtridiag_dbeta))
-dtridiag_dgamma = calc_dtridiag_dgamma(dfactor, dMdgamma, M)
-dtridiag_dh = calc_dtridiag_dh(dfactor, dMdgamma, M)
-print("dtridiag_dgamma", dtridiag_dgamma, "determinant", np.linalg.det(dtridiag_dgamma),
-      "dtridiag_dh", dtridiag_dh, "determinant", np.linalg.det(dtridiag_dh))
-dtridiagdTetta = get_dtridiagdTetta(dtridiag_dnu, dtridiag_dbeta, dtridiag_dgamma, dtridiag_dh)
-print("dtridiagdTetta", dtridiagdTetta, "determinant", np.linalg.det(dtridiagdTetta), dtridiagdTetta.shape)
-
-dtridiag_inverse_dTetta = get_dtridiag_inverse_dTetta(inverse_tridiag, dtridiagdTetta)
-print("dtridiag_inverse_dTetta", dtridiag_inverse_dTetta, dtridiagdTetta.shape)
-"""
-"""
-model_AFS = calc_model_AFS(initial_phi, xx, ns)
-derivative_model_AFS = calc_dmodel_AFS_dphi(xx, ns)
-print("model_AFS", model_AFS)
-print("derivative_model_AFS", derivative_model_AFS)
-
-obj_func = S * np.log(model_AFS) - model_AFS - np.log(S)
-
-print("obj_func", obj_func)
-dobj_func_dphi = S * np.log(derivative_model_AFS) - derivative_model_AFS - np.log(S)
-print("dobj_func_dphi", dobj_func_dphi)
-eps = np.sqrt(np.finfo(float).eps)
-# derivative_model_AFS_sci = np.gradient(model_AFS, initial_phi)
-# print(derivative_model_AFS_sci)
-
-tetta = [nu, gamma, h, beta]
-
-"""
 """
 a = np.zeros(initial_phi.shape)
 a[1:] += dfactor[1:] * (-MInt * delj - V[:-1] / (2 * dx))
@@ -546,131 +510,8 @@ print("grad b gamma", np.gradient(b, gamma))
 print("grad b h", np.gradient(b, h))
 print("grad b nu", np.gradient(b, nu))
 print("grad b beta", np.gradient(b, beta))
-
-print("a, b, c", a, b, c, len(a), len(b), len(c))
-A_matrix = scipy.sparse.diags([a[1:], b, -c[:-1]], [-1, 0, 1]).toarray()
-print("A_matrix to array", A_matrix)
-print("grad gamma", np.gradient(A_matrix, gamma))
-grad_h_a = np.gradient(A_matrix, h)
-print("grad h", grad_h_a, type(grad_h_a), len(grad_h_a))
-
-A_matrix_inverse = scipy.linalg.inv(A_matrix)
-print("A_matrix", A_matrix, type(A_matrix))
-
-dAdgamma = scipy.sparse.dia_matrix(
-    scipy.sparse.diags([np.gradient(a[1:], gamma), np.gradient(b, gamma), np.gradient(-c[:-1], gamma)],
-                       [-1, 0, 1]))
-dAdh = scipy.sparse.dia_matrix(scipy.sparse.diags([np.gradient(a[1:], h), np.gradient(b, h), np.gradient(-c[:-1], h)],
-                                                  [-1, 0, 1]))
-dAdnu = scipy.sparse.dia_matrix(
-    scipy.sparse.diags([np.gradient(a[1:], nu), np.gradient(b, nu), np.gradient(-c[:-1], nu)],
-                       [-1, 0, 1]))
-dAdbeta = scipy.sparse.dia_matrix(
-    scipy.sparse.diags([np.gradient(a[1:], beta), np.gradient(b, beta), np.gradient(-c[:-1], beta)],
-                       [-1, 0, 1]))
-# diadA_matrixdgamma = scipy.sparse.dia_matrix(dAdgamma)
-# diadA_matrixdh = scipy.sparse.dia_matrix(dAdh)
-# diadA_matrixdh = scipy.sparse.dia_matrix(dAdnu)
-# diadA_matrixdh = scipy.sparse.dia_matrix(dAdbeta)
-# print("dA_matrixdgamma", dAdgamma)
-# print("dA_matrixdh", dAdh)
-# print("dA_matrixdnu", dAdnu)
-# print("dA_matrixdbeta", dAdbeta)
-dAdtetta = scipy.sparse.dia_matrix.multiply(dAdgamma, dAdh)
-dAdtetta = scipy.sparse.dia_matrix.multiply(dAdtetta, dAdnu)
-dAdtetta = scipy.sparse.dia_matrix.multiply(dAdtetta, dAdbeta)
-print("dAdtetta", dAdtetta.toarray())
-
-dia_mult [[8.27314515e+00 2.89696243e-01 0.00000000e+00 0.00000000e+00
-  0.00000000e+00]
- [2.15960854e+01 7.24956315e-01 8.13184324e-02 0.00000000e+00
-  0.00000000e+00]
- [0.00000000e+00 2.40295244e+00 4.88281250e-01 2.80166616e-02
-  0.00000000e+00]
- [0.00000000e+00 0.00000000e+00 3.40345646e-02 3.23888266e+01
-  5.48197611e-02]
- [0.00000000e+00 0.00000000e+00 0.00000000e+00 7.57744064e-02
-  7.57187304e+01]]
-
-# matrix_sparse = sparse.csr_matrix(matrix)
-print("initial_phi", initial_phi)
-next_phi = calc_next_phi(initial_phi, A_matrix, 0.1, xx, 30)
-print("next_phi", next_phi)
-# functional_F = functional_F(initial_phi, next_phi) #, A_matrix)
-# print("functional_F", functional_F)
-T = 3
-dFdphi = np.ones(ns)
-print("dFdphi", dFdphi)
-dFdTetta = dFdTetta(A_matrix, T, dAdtetta)
-
-adjoint_sol = scipy.sparse.dia_matrix(np.full(ns, np.matmul(dFdphi.T, derivative_model_AFS)))
-# adjoint_sol = np.matmul(dFdphi.T, derivative_model_AFS) #np.linalg.solve(A_matrix.T, first_der)
-print("adjoint_sol", adjoint_sol)
-
-phi_final = feedforward(M, initial_phi, A_matrix, xx, T, nu=1, gamma=0, h=0.5, theta0=1,
-                        initial_t=0, beta=1)
-print("phi_final", phi_final)
-# adjoint_sol = scipy.sparse.dia_matrix(adjoint_sol)
-target_grad = scipy.sparse.dia_matrix.multiply(adjoint_sol, dFdTetta)  # np.matmul(adjoint_sol, dFdTetta)
-print("target_grad", target_grad.toarray())
 """
-"""
-def ascent(xsol, params, vcb, vvb, alpha=1, max=50, savefig=False):
-    # Applies gradient ascent to find optimal parameters using a learning rate alpha.
-    s = copy.copy(xsol)
-    p = copy.copy(params)
-    oldg = 0.
-    newg = 1.
-    cacheg = 0
-    cachep = np.zeros(len(p))
-    gs = []
-    for i in range(max):
-        oldg = g(s)
-        grad = dgdp(s, p, vcb, vvb)
-        p = p + alpha * grad
-        s = solve(s, p, vcb, vvb,
-                  quiet=False)  # solve(np.concatenate((np.full(N,1/math.sqrt(N)),np.full(N,1/math.sqrt(N)),np.ones(N),(10**-15)*np.ones(2))),p,quiet=True) # solve(s,p,quiet=True)
-        newg = g(s)
-        gs.append(newg)
-        print("newg:", newg)
-        print("oldg:", oldg)
-        print("difference:", newg - oldg)
-        dv = np.concatenate((np.zeros(barrier_locs[0] + 1), p, np.zeros(N - barrier_locs[1] - 1)))
-        if newg > cacheg:
-            cacheg = copy.copy(newg)
-            cachep = copy.deepcopy(p)
-        print("\n")
-        if savefig is True:
-            plt.figure(1, dpi=120)
-            plt.plot(-vvb + dv)
-            plt.xlabel("Lattice label")
-            plt.ylabel("Valence band (J)")
-            plt.title("Overlap: " + '%.10f' % newg)
-            plt.savefig('images/' + str(i) + '.png', dpi=300)
-    # plt.figure(1)
-    # plt.xlabel("Lattice label")
-    # plt.ylabel("Probability density")
-    # plt.show()
-    print(gs)
-    return cachep
-    
-def dFdTetta(A_matrix, T, dAdtetta):
-    inv_matrix = scipy.linalg.inv(A_matrix)
-    dia_inverse = scipy.sparse.dia_matrix(inv_matrix)
-    matrix_power = scipy.sparse.dia_matrix.power(dia_inverse, T)
-    res = scipy.sparse.dia_matrix.multiply(matrix_power, dAdtetta)
-    res = scipy.sparse.dia_matrix.multiply(res, dia_inverse)
-    return res
 
 
-nu=1
-gamma=5
-h=0.5
-beta=1
-A_matrix [[ 2.1875   0.8125   0.       0.       0.     ]
- [-1.09375  4.25    -0.34375  0.       0.     ]
- [ 0.      -3.84375  4.      -0.84375  0.     ]
- [ 0.       0.      -4.34375  1.75    -1.09375]
- [ 0.       0.       0.      -5.1875  -2.1875 ]]
 
-"""
+
