@@ -1,5 +1,5 @@
 import unittest
-from adjoint_state_method import ASM_analyt
+from adjoint_state_method import ASM_analytic1D
 from sympy import *
 from scipy.misc import derivative
 import numpy as np
@@ -13,7 +13,7 @@ class DerivativesTestCase(unittest.TestCase):
         expect_res_simpy = diff(1. / nu * x * (1 - x) * (beta + 1.) ** 2 / (4. * beta), nu).subs({x:x_subs, nu:nu_subs,
                                                                                                   beta:beta_subs})
 
-        analytical_res = ASM_analyt._Vfunc_dnu(x_subs, nu_subs, beta_subs)
+        analytical_res = ASM_analytic1D._Vfunc_dnu(x_subs, nu_subs, beta_subs)
         self.assertEqual(expect_res_simpy, analytical_res)
 
     def test_Vfunc_dbeta(self):
@@ -21,7 +21,7 @@ class DerivativesTestCase(unittest.TestCase):
         x_subs, nu_subs, beta_subs = random.randrange(0, 1), random.randrange(1, 100), random.randrange(1, 10)
         expect_res_simpy = diff(1. / nu * x * (1 - x) * (beta + 1.) ** 2 / (4. * beta), beta).subs({x:x_subs, nu:nu_subs,
                                                                                                   beta:beta_subs})
-        analytical_res = ASM_analyt._Vfunc_dbeta(x_subs, nu_subs, beta_subs)
+        analytical_res = ASM_analytic1D._Vfunc_dbeta(x_subs, nu_subs, beta_subs)
         self.assertEqual(expect_res_simpy, analytical_res)
 
     def test__Mfunc1D_dgamma(self):
@@ -30,7 +30,7 @@ class DerivativesTestCase(unittest.TestCase):
         expect_res_simpy = diff(gamma * 2 * x * (h + (1 - 2 * h) * x) * (1 - x), gamma).subs(
             {x: x_subs, gamma: gamma_subs,
              h: h_subs})
-        analytical_res = ASM_analyt._Mfunc1D_dgamma(x_subs, h_subs)
+        analytical_res = ASM_analytic1D._Mfunc1D_dgamma(x_subs, h_subs)
         self.assertEqual(expect_res_simpy, analytical_res)
 
     def test__Mfunc1D_dh(self):
@@ -39,7 +39,7 @@ class DerivativesTestCase(unittest.TestCase):
         expect_res_simpy = diff(gamma * 2 * x * (h + (1 - 2 * h) * x) * (1 - x), h).subs(
             {x: x_subs, gamma: gamma_subs,
              h: h_subs})
-        analytical_res = ASM_analyt._Mfunc1D_dh(x_subs, gamma_subs)
+        analytical_res = ASM_analytic1D._Mfunc1D_dh(x_subs, gamma_subs)
         self.assertEqual(expect_res_simpy, analytical_res)
 
     def test_from_phi_1D_direct_der(self):
@@ -56,8 +56,8 @@ class DerivativesTestCase(unittest.TestCase):
         xx = np.sort(np.random.random_sample(pts))
         phi = np.sort(np.random.standard_exponential(pts))
         ns = [len(phi) - 1]
-        expect_res = partial_derivative(ASM_analyt._from_phi_1D_direct, 0, [phi, ns[0], xx])
-        analytical_res = ASM_analyt._from_phi_1D_direct_dphi(ns[0], xx)
+        expect_res = partial_derivative(ASM_analytic1D._from_phi_1D_direct, 0, [phi, ns[0], xx])
+        analytical_res = ASM_analytic1D._from_phi_1D_direct_dphi(ns[0], xx)
         self.assertEqual(expect_res.any(), analytical_res.any())
 
         """
@@ -72,7 +72,9 @@ class DerivativesTestCase(unittest.TestCase):
         self.assertEqual(expect_res.any(), analytical_res.any())
 """
 
+
 suite = unittest.TestLoader().loadTestsFromTestCase(DerivativesTestCase)
+
 
 if __name__ == '__main__':
     unittest.main()
