@@ -1,5 +1,5 @@
 # dadi_adjoint_state
-## Realization of afjoin-state method with neural network (backpropagation)
+## Realization of afjoint-state method with neural network (backpropagation)
 
 We know that training a network requires three steps.
 
@@ -9,6 +9,7 @@ We know that training a network requires three steps.
 3.  Backpropagation — The final step is updating the weights [and biases] of the network using the backpropagation algorithm - theta vector of parameters.
 
 Our four step will be gradient ascent.
+
 4.  In gradient ascent one is trying to reach the maximum of the likelihood function with respect to the parameters using the derivatives calculated in the
     back-propagation.
     
