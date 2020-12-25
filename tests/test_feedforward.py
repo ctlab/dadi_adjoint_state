@@ -31,5 +31,6 @@ class FeedforwardTestCase(unittest.TestCase):
 
 suite = unittest.TestLoader().loadTestsFromTestCase(FeedforwardTestCase)
 
+
 if __name__ == '__main__':
     unittest.main()

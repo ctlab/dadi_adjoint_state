@@ -1,4 +1,7 @@
 import unittest
+
+import dadi
+
 from adjoint_state_method import ASM_analytic1D
 from sympy import *
 from scipy.misc import derivative
@@ -33,7 +36,7 @@ class DerivativesTestCase(unittest.TestCase):
         analytical_res = ASM_analytic1D._Mfunc1D_dgamma(x_subs, h_subs)
         self.assertEqual(expect_res_simpy, analytical_res)
 
-    def test__Mfunc1D_dh(self):
+    def test_Mfunc1D_dh(self):
         x, gamma, h = symbols('x gamma h')
         x_subs, gamma_subs, h_subs = random.randrange(0, 1), random.randrange(0, 1), random.randrange(0, 1)
         expect_res_simpy = diff(gamma * 2 * x * (h + (1 - 2 * h) * x) * (1 - x), h).subs(
@@ -42,7 +45,28 @@ class DerivativesTestCase(unittest.TestCase):
         analytical_res = ASM_analytic1D._Mfunc1D_dh(x_subs, gamma_subs)
         self.assertEqual(expect_res_simpy, analytical_res)
 
-    def test_from_phi_1D_direct_der(self):
+    def test_from_phi_1D_direct_dphi_analytical(self):
+        """ test failed """
+        def partial_derivative(func, var=0, point=[]):
+            args = point[:]
+
+            def wraps(x):
+                args[var] = x
+                return func(*args)
+
+            return derivative(wraps, point[var], dx=1e-6)
+
+        pts = 10
+        xx = np.sort(np.random.random_sample(pts))
+        dx = np.diff(xx)
+        dfactor = ASM_analytic1D._compute_dfactor(dx)
+        phi = np.sort(np.random.standard_exponential(pts))
+        ns = [len(phi) - 1]
+        expect_res = partial_derivative(ASM_analytic1D._from_phi_1D_direct, 0, [phi, ns[0], xx])
+        analytical_derivative_res = ASM_analytic1D._from_phi_1D_direct_dphi_analytical(ns[0], xx, dfactor)
+        self.assertEqual(expect_res.any(), analytical_derivative_res.any())
+
+    def test_from_phi_1D_direct_dphi_directly(self):
         def partial_derivative(func, var=0, point=[]):
             args = point[:]
 
@@ -57,10 +81,34 @@ class DerivativesTestCase(unittest.TestCase):
         phi = np.sort(np.random.standard_exponential(pts))
         ns = [len(phi) - 1]
         expect_res = partial_derivative(ASM_analytic1D._from_phi_1D_direct, 0, [phi, ns[0], xx])
-        analytical_res = ASM_analytic1D._from_phi_1D_direct_dphi(ns[0], xx)
-        self.assertEqual(expect_res.any(), analytical_res.any())
+        direct_derivative_res = ASM_analytic1D._from_phi_1D_direct_dphi_directly(ns[0], xx)
+        self.assertEqual(expect_res.any(), direct_derivative_res.any())
 
-        """
+    def test_dll_dphi(self):
+        def partial_derivative(func, var=0, point=[]):
+            args = point[:]
+
+            def wraps(x):
+                args[var] = x
+                return func(*args)
+
+            return derivative(wraps, point[var], dx=1e-6)
+
+        data = dadi.Spectrum.from_file('fs_data.fs')
+        ns = data.sample_sizes  # mask corners
+        print("ns", ns)
+        pts = 19
+        xx = dadi.Numerics.default_grid(pts)
+        # xx = np.sort(np.random.random_sample(pts))
+        phi = np.sort(np.random.standard_exponential(pts))
+        model = ASM_analytic1D._from_phi_1D_direct(phi, ns[0], xx)
+        # ns = [len(phi) - 1]
+        expect_res = partial_derivative(ASM_analytic1D.calc_objective_func, 0, [phi, xx, ns[0], data])
+        dll_dphi = ASM_analytic1D.dll_dphi(model, data, ns, xx)
+        self.assertEqual(expect_res.any(), dll_dphi.any())
+
+
+"""
         data = dadi.Spectrum.from_file('fs_data.fs')
         ns = data.sample_sizes
         print("ns", ns)
