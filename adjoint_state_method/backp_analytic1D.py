@@ -197,16 +197,7 @@ class NeuralNetwork(object):
         self.xx = dadi.Numerics.default_grid(self.pts)
         self.dx = np.diff(self.xx)
         self.dfactor = dadi.Integration._compute_dfactor(self.dx)
-        self.delj = dadi.Integration._compute_delj(self.dx, self.parameters['MInt'], self.parameters['VInt'])
-
-        self.parameters = {'theta': {'nu': 2, 'gamma': 0.5, 'h': 0.5, 'beta': 1, 'theta0': 1}}
-        self.parameters['phi0'] = dadi.PhiManip.phi_1D(self.xx, self.parameters['theta']['nu'],
-                                                       self.parameters['theta']['theta0'],
-                                                       self.parameters['theta']['gamma'], self.parameters['theta']['h'],
-                                                       self.parameters['theta']['beta'])
-        # just for initialization
-        self.parameters['phi_injected'] = dict()  # self.parameters['phi0']
-        self.parameters['phi'] = dict()  # self.parameters['phi0']
+        self.parameters = dict()
 
         # Initialize the likelihood:
         self.parameters['ll'] = np.zeros(self.ns[0] + 1)
@@ -215,38 +206,45 @@ class NeuralNetwork(object):
         self.derivatives = {'dF_dphi': -1 * np.ones(self.ns[0])}  # self.pts seems to be more righter
 
     def compute_weights(self):
-        self.parameters['M'] = _Mfunc1D(self.xx, self.parameters['theta']['gamma'], self.parameters['theta']['h'])
-        self.parameters['MInt'] = _Mfunc1D((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['theta']['gamma'],
-                                           self.parameters['theta']['h'])
-        self.parameters['dM_dgamma'] = _Mfunc1D_dgamma((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['theta']['h'])  # Int
-        self.parameters['dM_dh'] = _Mfunc1D_dh((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['theta']['gamma'])  # Int
+        self.parameters['M'] = _Mfunc1D(self.xx, self.parameters['Theta']['gamma'], self.parameters['Theta']['h'])
+        self.parameters['MInt'] = _Mfunc1D((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['Theta']['gamma'],
+                                           self.parameters['Theta']['h'])
 
-        self.parameters['V'] = _Vfunc(self.xx, self.parameters['theta']['nu'], self.parameters['theta']['beta'])
-        self.parameters['VInt'] = _Vfunc((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['theta']['nu'],
-                                         self.parameters['theta']['beta'])
-        self.parameters['dV_dnu'] = _Vfunc_dnu(self.parameters['xx'], self.parameters['theta']['nu'],
-                                               self.parameters['theta']['beta'])
-        self.parameters['dV_dbeta'] = _Vfunc_dbeta(self.parameters['xx'], self.parameters['theta']['nu'],
-                                                   self.parameters['theta']['beta'])
+        self.parameters['dM_dgamma'] = _Mfunc1D_dgamma((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['Theta'][
+            'h'])  # Int
+        self.parameters['dM_dh'] = _Mfunc1D_dh((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['Theta']['gamma'])
+        # Int
+
+        self.parameters['V'] = _Vfunc(self.xx, self.parameters['Theta']['nu'], self.parameters['Theta']['beta'])
+        self.parameters['VInt'] = _Vfunc((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['Theta']['nu'],
+                                         self.parameters['Theta']['beta'])
+        self.parameters['dV_dnu'] = _Vfunc_dnu(self.xx, self.parameters['Theta']['nu'],
+                                               self.parameters['Theta']['beta'])
+        self.parameters['dV_dbeta'] = _Vfunc_dbeta(self.xx, self.parameters['Theta']['nu'],
+                                                   self.parameters['Theta']['beta'])
+        self.parameters['delj'] = dadi.Integration._compute_delj(self.dx, self.parameters['MInt'], self.parameters[
+            'VInt'])
 
         # Initialize the tridiagonal matrix:
         self.parameters['A'] = calc_tridiag_matrix(self.parameters['phi0'], self.dfactor, self.parameters['MInt'],
-                                                   self.parameters['M'], self.parameters['V'], self.dx, self.delj)
+                                                   self.parameters['M'], self.parameters['V'], self.dx,
+                                                   self.parameters['delj'])
         self.parameters['A_inv'] = calc_inverse_tridiag_matrix(self.parameters['A'])
         self.parameters['dA_dnu'] = calc_dtridiag_dnu(self.parameters['phi0'], self.dfactor, self.parameters['dV_dnu'],
-                                                      self.dx, self.parameters['theta']['nu'], self.parameters['M'])
+                                                      self.dx, self.parameters['Theta']['nu'], self.parameters['M'])
         self.parameters['dA_dbeta'] = calc_dtridiag_dbeta(self.parameters['phi0'], self.dfactor,
                                                           self.parameters['dV_dbeta'], self.dx)
         self.parameters['dA_dgamma'] = calc_dtridiag_dgamma(self.parameters['phi0'], self.dfactor,
                                                             self.parameters['dM_dgamma'], self.parameters['M'],
-                                                            self.dx, self.delj)
+                                                            self.dx, self.parameters['delj'])
         self.parameters['dA_dh'] = calc_dtridiag_dh(self.parameters['phi0'], self.dfactor,
                                                     self.parameters['dM_dh'], self.parameters['M'], self.dx,
-                                                    self.delj)
-        self.parameters['dA_dtheta'] = get_dtridiag_dTheta(self.parameters['dA_dnu'], self.parameters['dA_dbeta'],
+                                                    self.parameters['delj'])
+        self.parameters['dA_dTheta'] = get_dtridiag_dTheta(self.parameters['dA_dnu'], self.parameters['dA_dbeta'],
                                                            self.parameters['dA_dgamma'], self.parameters['dA_dh'])
-        self.parameters['dA_inv_dtheta'] = get_dtridiag_inverse_dTheta(self.parameters['A_inv'],
-                                                                       self.parameters['dA_dtheta'])
+        self.parameters['dA_inv_dTheta'] = get_dtridiag_inverse_dTheta(self.parameters['A_inv'],
+                                                                       self.parameters['dA_dTheta'])
+
         """
         self.derivatives = {'dF_dtheta': np.zeros([self.parameters['dA_inv_dtheta'].shape[0], self.ns[0]],
                                                   dtype=float),
@@ -256,18 +254,33 @@ class NeuralNetwork(object):
                             'adjoint_field': np.zeros(self.ns[0])}
         """
 
-    def forward_propagate(self):
+    def forward_propagate(self, Theta):
+        self.parameters = {
+            'Theta': {
+                'nu': Theta[0], 'gamma': Theta[1], 'h': Theta[2], 'beta': Theta[3],
+                'theta0': Theta[4]
+                }
+            }
+        self.parameters['phi0'] = dadi.PhiManip.phi_1D(self.xx, nu=self.parameters['Theta']['nu'],
+                                                       theta0=self.parameters['Theta']['theta0'],
+                                                       gamma=self.parameters['Theta']['gamma'],
+                                                       h=self.parameters['Theta']['h'],
+                                                       theta=None,
+                                                       beta=self.parameters['Theta']['beta'])
+        self.parameters['phi_injected'] = dict()  # self.parameters['phi0']
+        self.parameters['phi'] = dict()  # self.parameters['phi0']
+        self.compute_weights()
         # Calculate the activations (phi_injected) and output (phi) for every layer t
-        dt = dadi.Integration._compute_dt(self.dx, self.parameters['theta']['nu'], [0], self.parameters['theta']['gamma'],
-                                          self.parameters['theta']['h'])
+        dt = dadi.Integration._compute_dt(self.dx, self.parameters['Theta']['nu'], [0], self.parameters['Theta'][
+            'gamma'], self.parameters['Theta']['h'])
         current_t = self.initial_t
         previous_phi = self.parameters['phi0']
         while current_t < self.T:
             this_dt = min(dt, self.T - current_t)
-            self.parameters['phi_injected']['phi_injected_' + str(this_dt)], self.parameters['phi']['phi_' + str(
-                this_dt)] = \
+            self.parameters['phi_injected']['phi_injected_' + str(this_dt)], \
+            self.parameters['phi']['phi_' + str(this_dt)] = \
                 calc_injected_and_next_phi(previous_phi, self.parameters['A'], this_dt, self.xx,
-                                           self.parameters['theta']['theta0'])
+                                           self.parameters['Theta']['theta0'])
             # self.parameters['phi_injected'], self.parameters['phi'] = \
             #    calc_injected_and_next_phi(previous_phi, self.parameters['A'], this_dt, self.xx, self.parameters[
             #    'theta0'])
@@ -276,7 +289,7 @@ class NeuralNetwork(object):
 
     def compute_model(self):
         self.parameters['model'] = dadi.Spectrum.from_phi(list(self.parameters['phi'].values())[-1], self.ns,
-                                                          self.parameters['xx'], force_direct=True)
+                                                          [self.xx], force_direct=True)
 
     def compute_ll(self, data):
         # for access the last value from dict use list(self.parameters['phi'].values())[-1]
@@ -292,11 +305,13 @@ class NeuralNetwork(object):
                                                                           np.asarray(self.derivatives['dll_dphi'])[1:]))
         shorted_phi_inj = list(self.parameters['phi_injected'].items())[:-1]
         shorted_phi_inj = dict(shorted_phi_inj)  # [::-1] for reverse mode
+        self.derivatives['dF_dTheta'] = 0
+        self.derivatives['dll_dTheta'] = 0
         for phi_inj_name, phi_inj_value in shorted_phi_inj.items():
-            self.derivatives['dF_dtheta'] += np.matmul(self.parameters['dA_inv_dtheta'], phi_inj_value)
-            self.derivatives['dF_dtheta'] = np.matmul(self.derivatives['dF_dtheta'],
+            self.derivatives['dF_dTheta'] += np.matmul(self.parameters['dA_inv_dTheta'], phi_inj_value)
+            self.derivatives['dF_dTheta'] = np.matmul(self.derivatives['dF_dTheta'],
                                                       self.parameters['A_inv'])
-        self.derivatives['dll_dtheta'] = np.matmul(self.derivatives['dF_dtheta'], self.derivatives['adjoint_field'])
+        self.derivatives['dll_dTheta'] = np.matmul(self.derivatives['dF_dTheta'], self.derivatives['adjoint_field'])
         # i = phi_inj_name.split('_')[-1]
         # self.derivatives['dF_dtheta']['dF_dtheta' + i] += np.matmul(self.parameters['dA_inv_dtheta'],
         # phi_inj_value)
@@ -304,19 +319,19 @@ class NeuralNetwork(object):
         #                                                           self.parameters['A_inv'])
 
     def update_parameters(self, lr):
-        dt = dadi.Integration._compute_dt(self.dx, self.parameters['theta']['nu'], [0],
-                                          self.parameters['theta']['gamma'],
-                                          self.parameters['theta']['h'])
+        dt = dadi.Integration._compute_dt(self.dx, self.parameters['Theta']['nu'], [0],
+                                          self.parameters['Theta']['gamma'],
+                                          self.parameters['Theta']['h'])
         current_t = self.initial_t
         while current_t < self.T:
             this_dt = min(dt, self.T - current_t)
-            for param in self.parameters['theta'].keys():
-                self.parameters['theta'][param] += lr * self.derivatives['dll_dtheta']
-            current_t += this_dt
-        self.compute_weights()
+            for index, key in list(enumerate(self.parameters['Theta']))[:-1]:
+                self.parameters['Theta'][key] += lr * self.derivatives['dll_dTheta'][index]
+                current_t += this_dt
+            self.compute_weights()
 
-    def predict(self):
-        self.forward_propagate()
+    def predict(self, p):
+        self.forward_propagate(p)
         self.compute_model()
         return self.parameters['model']
 
@@ -325,15 +340,22 @@ class NeuralNetwork(object):
             ll = 0  # stores the ll
             n_c = 0  # stores the number of correct predictions
             for i in range(0, P.shape[0]):
-                p = P[i].reshape((P[i].size, 1))
+                # p = P[i].reshape((P[i].size, 1))
 
-                self.forward_propagate(p)
+                self.forward_propagate(P[i])
+                self.compute_model()
                 self.compute_ll(data)
                 self.compute_derivatives(data)
                 self.update_parameters(lr)
 
-                ll += self.parameters['ll']
-                data_predicted = self.predict()
+                ll -= self.parameters['ll']
+                data_predicted = self.predict(P[i])
+                if data_predicted.all() == data.all():
+                    n_c += 1
+            ll = ll / P.shape[0]
+            print('Iteration: ', iter)
+            print("Likelihood: ", ll)
+            print("Accuracy:", (n_c / P.shape[0]) * 100)
 
 
 # Importing the dataset
@@ -343,11 +365,11 @@ ns = dataset.sample_sizes  # mask corners
 upper_bound = [100, 1, 1, 10, 1]
 lower_bound = [1e-2, 1e-2, 1e-2, 1e-2, 1]
 number_of_traininigs = 10
-# set of vectors of parameters P
+# (training) set of vectors of parameters P
 P = list()
 for low, high in zip(lower_bound, upper_bound):
-        column = np.random.uniform(low=low, high=high, size=number_of_traininigs)
-        P.append(column)
+    column = np.random.uniform(low=low, high=high, size=number_of_traininigs)
+    P.append(column)
 
 P = np.asarray(P).T
 
@@ -367,7 +389,7 @@ timeline_architecture_last = 70
 pts = 19
 # Creating the Network
 adjointer = NeuralNetwork(timeline_architecture_initial, timeline_architecture_last, ns, pts)
-# Training the classifier
+# Training
 adjointer.fit(P, dataset, 100)
 # Predicting:
-n_c = 0
+# n_c = 0
