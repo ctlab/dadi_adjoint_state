@@ -205,7 +205,18 @@ class NeuralNetwork(object):
 
         self.derivatives = {'dF_dphi': -1 * np.ones(self.ns[0])}  # self.pts seems to be more righter
 
-    def compute_weights(self):
+    def compute_weights(self, Theta):
+        self.parameters = {
+            'Theta': {
+                'nu': Theta[0], 'gamma': Theta[1], 'h': Theta[2], 'beta': Theta[3], 'theta0': Theta[4]
+                }
+            }
+        self.parameters['phi0'] = dadi.PhiManip.phi_1D(self.xx, nu=self.parameters['Theta']['nu'],
+                                                       theta0=self.parameters['Theta']['theta0'],
+                                                       gamma=self.parameters['Theta']['gamma'],
+                                                       h=self.parameters['Theta']['h'],
+                                                       theta=None,
+                                                       beta=self.parameters['Theta']['beta'])
         self.parameters['M'] = _Mfunc1D(self.xx, self.parameters['Theta']['gamma'], self.parameters['Theta']['h'])
         self.parameters['MInt'] = _Mfunc1D((self.xx[:-1] + self.xx[1:]) / 2, self.parameters['Theta']['gamma'],
                                            self.parameters['Theta']['h'])
@@ -255,6 +266,7 @@ class NeuralNetwork(object):
         """
 
     def forward_propagate(self, Theta):
+        """
         self.parameters = {
             'Theta': {
                 'nu': Theta[0], 'gamma': Theta[1], 'h': Theta[2], 'beta': Theta[3],
@@ -267,9 +279,11 @@ class NeuralNetwork(object):
                                                        h=self.parameters['Theta']['h'],
                                                        theta=None,
                                                        beta=self.parameters['Theta']['beta'])
+                                                       """
+        self.compute_weights(Theta)
         self.parameters['phi_injected'] = dict()  # self.parameters['phi0']
         self.parameters['phi'] = dict()  # self.parameters['phi0']
-        self.compute_weights()
+        # self.compute_weights()  # initially compute weights
         # Calculate the activations (phi_injected) and output (phi) for every layer t
         dt = dadi.Integration._compute_dt(self.dx, self.parameters['Theta']['nu'], [0], self.parameters['Theta'][
             'gamma'], self.parameters['Theta']['h'])
@@ -293,7 +307,8 @@ class NeuralNetwork(object):
 
     def compute_ll(self, data):
         # for access the last value from dict use list(self.parameters['phi'].values())[-1]
-        self.parameters['ll'] = data * np.log(self.parameters['model']) - self.parameters['model'] - np.log(data)
+        self.parameters['ll'] = dadi.Inference.ll_multinom(self.parameters['model'], data)
+        # self.parameters['ll'] = data * np.log(self.parameters['model']) - self.parameters['model'] - np.log(data)
 
     def compute_derivatives(self, data):
         """
@@ -389,7 +404,13 @@ timeline_architecture_last = 70
 pts = 19
 # Creating the Network
 adjointer = NeuralNetwork(timeline_architecture_initial, timeline_architecture_last, ns, pts)
+for i in range(0, P.shape[0]):
+    # p = P[i].reshape((P[i].size, 1))
+    adjointer.forward_propagate(P[i])
+    phi_backp = list(adjointer.parameters['phi'].values())[-1]
+    print("phi_" + str(i), phi_backp)
+    print("params", P[i])
 # Training
-adjointer.fit(P, dataset, 100)
+#adjointer.fit(P, dataset, 100)
 # Predicting:
 # n_c = 0

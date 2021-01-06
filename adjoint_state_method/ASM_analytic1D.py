@@ -410,7 +410,6 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi, T):
     logger.debug("observed spectrum: {0}\n xx: {1}\n nu: {2}\n gamma: {3}\n"
                  " h: {4}\n beta: {5}\n initial_phi: {6}\n".format(observed_spectrum, xx, nu, gamma, h, beta,
                                                                    initial_phi))
-
     theta = np.array([nu, gamma, h, beta])
     M = _Mfunc1D(xx, gamma, h)
     MInt = _Mfunc1D((xx[:-1] + xx[1:]) / 2, gamma, h)
