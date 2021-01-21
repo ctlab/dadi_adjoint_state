@@ -28,8 +28,8 @@ import numpy
 from numpy import newaxis as nuax
 
 cuda_enabled = False
-from tests import Misc, Numerics, tridiag
-from tests import integration_c as int_c
+from dadi import Misc, Numerics, tridiag, PhiManip
+from dadi import integration_c as int_c
 
 #: Controls timestep for integrations. This is a reasonable default for
 #: gridsizes of ~60. See set_timescale_factor for better control.
@@ -342,6 +342,7 @@ def two_pops(phi, xx, T, nu1=1, nu2=1, m12=0, m21=0, gamma1=0, gamma2=0,
         current_t = next_t
     return phi
 
+
 def three_pops(phi, xx, T, nu1=1, nu2=1, nu3=1,
                m12=0, m13=0, m21=0, m23=0, m31=0, m32=0,
                gamma1=0, gamma2=0, gamma3=0, h1=0.5, h2=0.5, h3=0.5,
@@ -643,6 +644,60 @@ def _compute_delj(dx, MInt, VInt, axis=0):
         delj = 0.5
     return delj
 
+def _one_pop_const_params_check_diags(phi, xx, T, nu=1, gamma=0, h=0.5, theta0=1,
+                          initial_t=0, beta=1):
+    """
+    Integrate one population with constant parameters.
+
+    In this case, we can precompute our a,b,c matrices for the linear system
+    we need to evolve. This we can efficiently do in Python, rather than
+    relying on C. The nice thing is that the Python is much faster to debug.
+    """
+    if numpy.any(numpy.less([T,nu,theta0], 0)):
+        raise ValueError('A time, population size, migration rate, or theta0 '
+                         'is < 0. Has the model been mis-specified?')
+    if numpy.any(numpy.equal([nu], 0)):
+        raise ValueError('A population size is 0. Has the model been '
+                         'mis-specified?')
+
+    M = _Mfunc1D(xx, gamma, h)
+    MInt = _Mfunc1D((xx[:-1] + xx[1:])/2, gamma, h)
+    V = _Vfunc(xx, nu, beta=beta)
+    VInt = _Vfunc((xx[:-1] + xx[1:])/2, nu, beta=beta)
+
+    dx = numpy.diff(xx)
+    dfactor = _compute_dfactor(dx)
+    delj = _compute_delj(dx, MInt, VInt)
+
+    a = numpy.zeros(phi.shape)
+    a[1:] += dfactor[1:]*(-MInt * delj - V[:-1]/(2*dx))
+
+    c = numpy.zeros(phi.shape)
+    c[:-1] += -dfactor[:-1]*(-MInt * (1-delj) + V[1:]/(2*dx))
+
+    b = numpy.zeros(phi.shape)
+    b[:-1] += -dfactor[:-1]*(-MInt * delj - V[:-1]/(2*dx))
+    b[1:] += dfactor[1:]*(-MInt * (1-delj) + V[1:]/(2*dx))
+
+    if (M[0] <= 0):
+        b[0] += (0.5 / nu - M[0]) * 2 / dx[0]
+    if (M[-1] >= 0):
+        b[-1] += -(-0.5 / nu - M[-1]) * 2 / dx[-1]
+    dt = _compute_dt(dx, nu, [0], gamma, h)
+
+    yield a, b, c
+
+    current_t = initial_t
+    while current_t < T:
+        this_dt = min(dt, T - current_t)
+        _inject_mutations_1D(phi, this_dt, xx, theta0)
+        r = phi/this_dt
+        phi = tridiag.tridiag(a, b+1/this_dt, c, r)
+        # yield phi
+        current_t += this_dt
+    return phi
+
+
 def _one_pop_const_params(phi, xx, T, nu=1, gamma=0, h=0.5, theta0=1, 
                           initial_t=0, beta=1):
     """
@@ -687,12 +742,18 @@ def _one_pop_const_params(phi, xx, T, nu=1, gamma=0, h=0.5, theta0=1,
     current_t = initial_t
     while current_t < T:
         this_dt = min(dt, T - current_t)
-
         _inject_mutations_1D(phi, this_dt, xx, theta0)
-        r = phi / this_dt
-        phi = tridiag.tridiag(a, b + 1 / this_dt, c, r)
+        r = phi/this_dt
+        phi = tridiag.tridiag(a, b+1/this_dt, c, r)
+        yield phi
         current_t += this_dt
     return phi
+
+
+pts = 19
+xx = Numerics.default_grid(pts)
+phi_initial = PhiManip.phi_1D(xx)
+_one_pop_const_params(phi_initial, xx, 3)
 
 
 def _two_pops_const_params(phi, xx, T, nu1=1,nu2=1, m12=0, m21=0,

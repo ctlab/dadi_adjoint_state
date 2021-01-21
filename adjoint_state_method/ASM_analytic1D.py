@@ -37,13 +37,6 @@ def simple_grid(pts):
 #
 # Here are the python versions of the population genetic functions and its derivatives.
 #
-def _Vfunc(x, nu, beta=1):
-    return 1. / nu * x * (1 - x) * (beta + 1.) ** 2 / (4. * beta)
-
-
-def _Mfunc1D(x, gamma, h):
-    return gamma * 2 * x * (h + (1 - 2 * h) * x) * (1 - x)
-
 
 def _Vfunc_dnu(x, nu, beta=1):
     return (- x * (1 - x) * (beta + 1.) ** 2) / (nu ** 2 * 4. * beta)
@@ -60,42 +53,6 @@ def _Mfunc1D_dgamma(x, h):
 
 def _Mfunc1D_dh(x, gamma):
     return 2 * gamma * x * (2 * x ** 2 - 3 * x + 1)
-
-
-def _compute_delj(dx, MInt, VInt, axis=0):
-    r"""
-    Chang an Cooper's \delta_j term. Typically we set this to 0.5.
-    """
-    # Chang and Cooper's fancy delta j trick...
-    if use_delj_trick:
-        # upslice will raise the dimensionality of dx and VInt to be appropriate
-        # for functioning with MInt.
-        upslice = [nuax for ii in range(MInt.ndim)]
-        upslice[axis] = slice(None)
-        # wj = 2 *MInt*dx[upslice]
-        wj = MInt * dx[upslice]
-        epsj = np.exp(wj / VInt[upslice])
-        delj = 1 / wj - 1 / (epsj - 1)  # (-epsj*wj + epsj * VInt[upslice] - VInt[upslice])/(wj - epsj*wj)
-        # These where statements filter out edge case for delj
-        delj = np.where(np.isnan(delj), 0.5, delj)
-        delj = np.where(np.isinf(delj), 0.5, delj)
-    else:
-        delj = 0.5
-    return delj
-
-
-def _compute_dfactor(dx):
-    r"""
-    \Delta_j from the paper.
-    """
-    # Controls how we take the derivative of the flux. The values here depend
-    #  on the fact that we're defining our probability integral using the
-    #  trapezoid rule.
-    dfactor = np.zeros(len(dx) + 1)
-    dfactor[1:-1] = 2 / (dx[:-1] + dx[1:])
-    dfactor[0] = 2 / dx[0]
-    dfactor[-1] = 2 / dx[-1]
-    return dfactor
 
 
 def _compute_dt(dx, nu, ms, gamma, h):
@@ -135,20 +92,20 @@ def _inject_mutations_1D(phi, dt, xx, theta0):
     return phi
 
 
-def calc_injected_and_next_phi(previous_phi, tridiag_matrix, this_dt, xx, theta0):
-    injected_phi = _inject_mutations_1D(previous_phi, this_dt, xx, theta0)
-    next_phi = np.matmul(np.linalg.inv(tridiag_matrix), injected_phi)  # scipy.linalg.inv(tridiag_matrix)
+def calc_injected_and_next_phi(phi, tridiag_matrix, this_dt, xx, theta0):
+    injected_phi = dadi.Integration._inject_mutations_1D(phi, this_dt, xx, theta0)
+    next_phi = np.matmul(np.linalg.inv(tridiag_matrix), injected_phi) / this_dt  # scipy.linalg.inv(tridiag_matrix)
     return injected_phi, next_phi
 
 
-def calc_tridiag_matrix(phi, dfactor, MInt, M, V, dx, nu, delj=0.5):
+def calc_tridiag_matrix(phi, dfactor, MInt, M, V, dx, nu, delj):
     a = np.zeros(phi.shape)
     a[1:] += dfactor[1:] * (-MInt * delj - V[:-1] / (2 * dx))
     c = np.zeros(phi.shape)
     c[:-1] += -dfactor[:-1] * (-MInt * (1 - delj) + V[1:] / (2 * dx))
     b = np.zeros(phi.shape)
-    b[:-1] += -dfactor[:-1] * (-MInt * delj - V[:-1] / (2 * dx))
-    b[1:] += dfactor[1:] * (-MInt * (1 - delj) + V[1:] / (2 * dx))
+    b[:-1] += -dfactor[:-1]*(-MInt * delj - V[:-1]/(2*dx))
+    b[1:] += dfactor[1:]*(-MInt * (1-delj) + V[1:]/(2*dx))
 
     if M[0] <= 0:
         b[0] += (0.5 / nu - M[0]) * 2 / dx[0]
@@ -194,7 +151,7 @@ def calc_dtridiag_dbeta(phi_initial, dfactor, dV_dbeta, dx):
     return dtridiag_dbeta
 
 
-def calc_dtridiag_dgamma(phi_initial, dfactor, dM_dgamma_Int, M, dx, delj=0.5):
+def calc_dtridiag_dgamma(phi_initial, dfactor, dM_dgamma_Int, M, dx, delj):
     a = np.zeros(phi_initial.shape)
     a[1:] += -dfactor[1:] * delj * dM_dgamma_Int
     c = np.zeros(phi_initial.shape)
@@ -212,7 +169,7 @@ def calc_dtridiag_dgamma(phi_initial, dfactor, dM_dgamma_Int, M, dx, delj=0.5):
     return dtridiag_dgamma
 
 
-def calc_dtridiag_dh(phi_initial, dfactor, dM_dh, M, dx, delj=0.5):
+def calc_dtridiag_dh(phi_initial, dfactor, dM_dh, M, dx, delj):
     a = np.zeros(phi_initial.shape)
     a[1:] += -dfactor[1:] * delj * dM_dh
     c = np.zeros(phi_initial.shape)
@@ -243,11 +200,9 @@ def get_dtridiag_inverse_dtheta(inverse_tridiag, dtridiag_dtheta):
     return result
 
 
-def feedforward(theta, previous_phi, tridiag_matrix, inverse_tridiag, xx, ns, dx, dfactor, T=3, theta0=1, initial_t=0,
-                delj=0.5):
-    nu, gamma, h, beta = theta
-    M = _Mfunc1D(xx, gamma, h)
-    # MInt = _Mfunc1D((xx[:-1] + xx[1:]) / 2, gamma, h)
+def feedforward(theta, previous_phi, xx, ns, dx, dfactor, M, MInt, V, initial_t, T, delj):
+    nu, gamma, h, beta, theta0 = theta
+
     dM_dgamma_Int = _Mfunc1D_dgamma((xx[:-1] + xx[1:]) / 2, h)
     dM_dh_Int = _Mfunc1D_dh((xx[:-1] + xx[1:]) / 2, gamma)
     dV_dnu = _Vfunc_dnu(xx, nu, beta)
@@ -256,21 +211,26 @@ def feedforward(theta, previous_phi, tridiag_matrix, inverse_tridiag, xx, ns, dx
     dtridiag_dbeta = calc_dtridiag_dbeta(previous_phi, dfactor, dV_dbeta, dx)
     dtridiag_dgamma = calc_dtridiag_dgamma(previous_phi, dfactor, dM_dgamma_Int, M, dx, delj)
     dtridiag_dh = calc_dtridiag_dh(previous_phi, dfactor, dM_dh_Int, M, dx, delj)
+
+    tridiag = calc_tridiag_matrix(previous_phi, dfactor, MInt, M, V, dx, nu, delj)
+    inverse_tridiag = calc_inverse_tridiag_matrix(tridiag)
     dtridiag_dTheta = get_dtridiag_dtheta(dtridiag_dnu, dtridiag_dbeta, dtridiag_dgamma, dtridiag_dh)
     dtridiag_inverse_dTheta = get_dtridiag_inverse_dtheta(inverse_tridiag, dtridiag_dTheta)
-    dF_dtheta = np.zeros([dtridiag_inverse_dTheta.shape[0], ns[0]], dtype=float)
+    dF_dtheta = np.zeros([dtridiag_dTheta.shape[0], ns[0]], dtype=float)
 
-    dt = _compute_dt(dx, nu, [0], gamma, h)
+    dt = dadi.Integration._compute_dt(dx, nu, [0], gamma, h)
     current_t = initial_t
     while current_t < T:
         this_dt = min(dt, T - current_t)
-        phi_injected, phi = calc_injected_and_next_phi(previous_phi, tridiag_matrix, this_dt, xx, theta0)
+        print("tridiag[0]", tridiag[0])
+        tridiag[0] += 1/dt
+        phi_injected, phi = calc_injected_and_next_phi(previous_phi, tridiag, this_dt, xx, theta0)
         previous_phi = phi
         current_t += this_dt
         dF_dtheta += np.matmul(dtridiag_inverse_dTheta, phi_injected)
         dF_dtheta = np.matmul(dF_dtheta, inverse_tridiag)
     # inject
-    dF_dtheta = np.matmul(dF_dtheta, tridiag_matrix)
+    dF_dtheta = np.matmul(dF_dtheta, tridiag)
 
     if not phi.any():
         logging.error('Phi not counted')
@@ -355,9 +315,8 @@ def dll_dphi(model, observed_spectrum, ns, xx):
 
 
 def calc_objective_func_from_theta(theta, phi_initial, tridiag, inverse_tridiag, xx, ns, dx, dfactor, observed_spectrum,
-                                   T, theta0, initial_t, delj):
-    phi, _ = feedforward(theta, phi_initial, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=T, theta0=theta0,
-                         initial_t=initial_t, delj=delj)
+                                   T, initial_t, delj):
+    phi, _ = feedforward(theta, phi_initial, tridiag, inverse_tridiag, xx, ns, dx, dfactor, initial_t, T, delj)
     model = _from_phi_1D_direct(phi, ns[0], xx)
     obj_func = observed_spectrum * np.log(model) - model - np.log(observed_spectrum)
     return obj_func
@@ -374,16 +333,16 @@ def dfunctionalF_dphi(ns):
     return -1 * np.ones(ns)
 
 
-def ascent(theta, dF_dtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T, theta0=1,
-           initial_t=0):
+def ascent(theta, dF_dtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, M, MInt, V,
+           initial_t, T, delj):
     learning_rate = 0.1
     target_grad = calc_target_grad(dF_dtheta, adjoint_field)
     for i in range(10):
         # while np.linalg.norm(target_grad) >= 0.5:
         theta_optimized = theta + learning_rate * target_grad
         theta = theta_optimized
-        phi, dF_dtheta = feedforward(theta, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=T, theta0=1,
-                                     initial_t=0)
+        phi, dF_dtheta = feedforward(theta, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, M, MInt, V, initial_t,
+                                     T, delj)
         target_grad = calc_target_grad(dF_dtheta, adjoint_field)
         # logging.debug("theta: {0}".format(theta))
     return theta
@@ -402,7 +361,7 @@ def plot_function(func_output):
     plt.show()
 
 
-def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi, T):
+def main(observed_spectrum, ns, xx, nu, gamma, h, beta, theta0, initial_phi, initial_t, T):
     logger = logging.getLogger()
     logger.setLevel(10)
     # logging.basicConfig(format='[%(asctime)s] %(levelname).1s %(message)s', level=logging.DEBUG)
@@ -410,30 +369,29 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi, T):
     logger.debug("observed spectrum: {0}\n xx: {1}\n nu: {2}\n gamma: {3}\n"
                  " h: {4}\n beta: {5}\n initial_phi: {6}\n".format(observed_spectrum, xx, nu, gamma, h, beta,
                                                                    initial_phi))
-    theta = np.array([nu, gamma, h, beta])
-    M = _Mfunc1D(xx, gamma, h)
-    MInt = _Mfunc1D((xx[:-1] + xx[1:]) / 2, gamma, h)
+    theta = np.array([nu, gamma, h, beta, theta0])
+    M = dadi.Integration._Mfunc1D(xx, gamma, h)
+    MInt = dadi.Integration._Mfunc1D((xx[:-1] + xx[1:]) / 2, gamma, h)
     dM_dgamma = _Mfunc1D_dgamma((xx[:-1] + xx[1:]) / 2, h)  # Int
     dM_dh = _Mfunc1D_dh((xx[:-1] + xx[1:]) / 2, gamma)  # Int
     logging.debug("M: {0}\n MInt: {1}\n dM_dgamma: {2}\n dM_dh: {3}".format(M, MInt, dM_dgamma, dM_dh))
 
-    V = _Vfunc(xx, nu, beta)
-    VInt = _Vfunc((xx[:-1] + xx[1:]) / 2, nu, beta=beta)
+    V = dadi.Integration._Vfunc(xx, nu, beta)
+    VInt = dadi.Integration._Vfunc((xx[:-1] + xx[1:]) / 2, nu, beta)
     dV_dnu = _Vfunc_dnu(xx, nu, beta)
     dV_dbeta = _Vfunc_dbeta(xx, nu, beta)
     logging.debug("V: {0} \n dV_dnu: {1} \n dV_dbeta: {2} \n".format(V, dV_dnu, dV_dbeta))
 
     dx = np.diff(xx)
-    dfactor = _compute_dfactor(dx)
-    delj = _compute_delj(dx, MInt, VInt)
+    dfactor = dadi.Integration._compute_dfactor(dx)
+    delj = dadi.Integration._compute_delj(dx, MInt, VInt)
     logging.debug("delj: {0}".format(delj))
-    tridiag = calc_tridiag_matrix(initial_phi, dfactor, MInt, M, V, dx, delj)
-    logging.debug("dfactor: {0}\n tridiag: \n {1} determinant: {2}".format(dfactor, tridiag, np.linalg.det(tridiag)))
-    inverse_tridiag = calc_inverse_tridiag_matrix(tridiag)
-    logging.debug("inverse_tridiag: \n {0} \n shape {1} \n".format(inverse_tridiag, inverse_tridiag.shape))
+    # tridiag = calc_tridiag_matrix(initial_phi, dfactor, MInt, M, V, dx, delj)
+    # logging.debug("dfactor: {0}\n tridiag: \n {1} determinant: {2}".format(dfactor, tridiag, np.linalg.det(tridiag)))
+    # inverse_tridiag = calc_inverse_tridiag_matrix(tridiag)
+    # logging.debug("inverse_tridiag: \n {0} \n shape {1} \n".format(inverse_tridiag, inverse_tridiag.shape))
 
-    phi, dF_dtheta = feedforward(theta, initial_phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T=T, theta0=1,
-                                 initial_t=0, delj=delj)
+    phi, dF_dtheta = feedforward(theta, initial_phi, xx, ns, dx, dfactor, M, MInt, V, initial_t, T, delj)
     logging.debug("phi from feedforward: {0}\n dF_dtheta (third derivative for ASM): \n {1}".format(phi, dF_dtheta))
     model = _from_phi_1D_direct(phi, ns[0], xx)
     logging.debug("AFS _from_phi_1D_direct: {0}\n".format(model))
@@ -453,7 +411,8 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi, T):
     #                                                                ns, dx, dfactor, observed_spectrum, T=T, theta0=1,
     #                                                                 initial_t=0, delj=delj)
     # logging.debug("objective_functional_from_theta: {0}\n".format(objective_functional_from_theta))
-    theta_opt = ascent(theta, dF_dtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor, T)
+    theta_opt = ascent(theta, dF_dtheta, adjoint_field, phi, tridiag, inverse_tridiag, xx, ns, dx, dfactor,
+                       M, MInt, V, initial_t, T, delj)
     logging.debug("theta_opt: {0}".format(theta_opt))
     print(len(observed_spectrum))
     opt_res = scipy.optimize.minimize(calc_objective_func_from_theta, theta,
@@ -463,10 +422,10 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, initial_phi, T):
     logging.debug("opt_res: {0}".format(opt_res))
 
 
-if __name__ == "__main__":
-    """
-    ns: Sample size of resulting Spectrum
-    pts: Number of grid points to use in integration.
+# if __name__ == "__main__":
+
+    # ns: Sample size of resulting Spectrum
+    # pts: Number of grid points to use in integration.
     """
     data = dadi.Spectrum.from_file('fs_data.fs')
     ns = data.sample_sizes  # mask corners
@@ -476,35 +435,35 @@ if __name__ == "__main__":
     nu = 2  # population size
     gamma = 0.5  # Selection coefficient
     """
-    The selection coefficient (s) of a given genotype as related to the fitness or
-    adaptive value (W) of that genotype is defined as s = 1 - W. (Fitness is the
-    relative probability that a genotype will reproduce.)"""
-    h = 0.5  # dominance coefficient
-    """
-    Genetics. 2011 Feb; 187(2): 553–566.
-    doi: 10.1534/genetics.110.124560
-        
-    We use h to indicate the dominance coefficient of the allele,
-    the proportion of fitness effect expressed in the homozygote.
-    Thus, a heterozygote would have fitness on average equal to
-    1 – hs times the fitness of the wild-type homozygote. If
-    h = 0, the heterozygote has fitness equal to that of the 
-    wild-type heterozygote, while if h = 1, then the heterozygote 
-    has fitness equal to that of the mutant homozygote. In practice 
-    h can be negative (indicating overdominance if the mutant allele
-    is deleterious), between 0 and 1 as discussed above or even >1
-    with underdominance.
-    """
-    beta = 1  # Breeding ratio (The sex ratio is the ratio of males to females in a population)
-    """beta: Breeding ratio, beta = Nf / Nm.
-    alpha: Male to female mutation rate ratio, beta = mu_m / mu_f."""
-    initial_phi = dadi.PhiManip.phi_1D(xx, nu, theta0=1.0, gamma=1, h=0.5, theta=None, beta=1)
-    T = 3
+    # The selection coefficient (s) of a given genotype as related to the fitness or
+    # adaptive value (W) of that genotype is defined as s = 1 - W. (Fitness is the
+    # relative probability that a genotype will reproduce.)"""
+    # h = 0.5  # dominance coefficient
 
-    try:
-        main(data, ns, xx, nu, gamma, h, beta, initial_phi, T)
-    except:
-        logging.exception("Unexpected error")
+    # Genetics. 2011 Feb; 187(2): 553–566.
+    # doi: 10.1534/genetics.110.124560
+        
+    # We use h to indicate the dominance coefficient of the allele,
+    # the proportion of fitness effect expressed in the homozygote.
+    # Thus, a heterozygote would have fitness on average equal to
+    # 1 – hs times the fitness of the wild-type homozygote. If
+    # h = 0, the heterozygote has fitness equal to that of the
+    # wild-type heterozygote, while if h = 1, then the heterozygote
+    # has fitness equal to that of the mutant homozygote. In practice
+    # h can be negative (indicating overdominance if the mutant allele
+    # is deleterious), between 0 and 1 as discussed above or even >1
+    # with underdominance.
+
+    # beta = 1  # Breeding ratio (The sex ratio is the ratio of males to females in a population)
+    # beta: Breeding ratio, beta = Nf / Nm.
+    # alpha: Male to female mutation rate ratio, beta = mu_m / mu_f."""
+    #initial_phi = dadi.PhiManip.phi_1D(xx, nu, theta0=1.0, gamma=1, h=0.5, theta=None, beta=1)
+    #T = 3
+
+    #try:
+    #    main(data, ns, xx, nu, gamma, h, beta, initial_phi, T)
+    #except:
+    #    logging.exception("Unexpected error")
 
 """
 a = np.zeros(initial_phi.shape)

@@ -17,6 +17,10 @@ void tridiag_premalloc(double a[], double b[], double c[], double r[], double u[
 
     This version can re-use dynamically allocated memory in the global gam
     variable.
+
+    Solves for a vector u[1..n] the tridiagonal linear set
+
+    One vector of workspace, gam is needed
     */
     double bet = b[0];
     int j;
