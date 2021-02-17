@@ -457,12 +457,12 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, theta0, initial_phi, ini
     # beta = 1  # Breeding ratio (The sex ratio is the ratio of males to females in a population)
     # beta: Breeding ratio, beta = Nf / Nm.
     # alpha: Male to female mutation rate ratio, beta = mu_m / mu_f."""
-    #initial_phi = dadi.PhiManip.phi_1D(xx, nu, theta0=1.0, gamma=1, h=0.5, theta=None, beta=1)
-    #T = 3
+    # initial_phi = dadi.PhiManip.phi_1D(xx, nu, theta0=1.0, gamma=1, h=0.5, theta=None, beta=1)
+    # T = 3
 
-    #try:
+    # try:
     #    main(data, ns, xx, nu, gamma, h, beta, initial_phi, T)
-    #except:
+    # except:
     #    logging.exception("Unexpected error")
 
 """

@@ -4,11 +4,12 @@ import dadi
 n_pop = 1
 pop_labels = ["Pop 1"]
 
-par_labels = ['nu', 'gamma', 'h', 'beta']
-popt = [2, 0.5, 0.5, 1]
+par_labels = ['nu', 'gamma', 'h', 'beta', 'theta0']
+popt = [2, 0.5, 0.5, 1, 1]
 
-lower_bound = [2, 0, 0, 1]
-upper_bound = [100, 1, 1, 10]
+upper_bound = [100, 1, 1, 10, 1]
+lower_bound = [1e-2, 1e-2, 1e-2, 1e-2, 1]
+
 
 ns_per_pop = 20
 ns = [ns_per_pop for _ in range(n_pop)]
@@ -40,3 +41,9 @@ if __name__ == "__main__":
     dadi.Plotting.plot_1d_fs(model, show=True)
     dadi.Plotting.plot_1d_comp_Poisson(model, data, fig_num=None, residual='Anscombe',
                             plot_masked=False, show=True)
+    """
+    Maximum log composite likelihood: -58.322867089216686
+    Simulated data saved to fs_data.fs
+    Optimal value of theta: 200.00000000000003
+    Size of the ancestral population: 100
+    """

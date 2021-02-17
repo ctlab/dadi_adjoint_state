@@ -13,10 +13,13 @@ def model_func(params, ns, pts):
     beta: Breeding ratio, beta = Nf / Nm.
     ns: Sequence of P sample sizes for each population.
     """
-    nu, gamma, h, beta = params
-    T = 20
+    nu, gamma, h, beta, theta0 = params
+    T = 3
     xx = dadi.Numerics.default_grid(pts)
-    phi = dadi.PhiManip.phi_1D(xx)
-    phi = dadi.Integration.one_pop(phi, xx, T, nu)
+    phi = dadi.PhiManip.phi_1D(xx, nu=nu, theta0=theta0, gamma=gamma,
+                                                       h=h, theta=None,
+                                                       beta=beta)
+    phi = dadi.Integration.one_pop(phi, xx, T, nu=nu, gamma=gamma, h=h, theta0=theta0, initial_t=0, frozen=False,
+                                   beta=beta)
     fs = dadi.Spectrum.from_phi(phi, ns, (xx,))
     return fs
