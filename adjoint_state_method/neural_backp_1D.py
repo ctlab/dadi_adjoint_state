@@ -1,9 +1,35 @@
+import logging
 import time
 import dadi
 import numpy as np
 import scipy
+import scipy.sparse
+import scipy.special
+import scipy.stats
 from scipy.integrate import trapz
-import scipy.special, scipy.sparse, scipy.stats
+import os
+
+preparentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+log_file = os.path.join(preparentdir, 'test_optimize.log')
+childLogger = logging.getLogger(__name__)
+childLogger.addHandler(logging.FileHandler(log_file))
+childLogger.setLevel(10)
+# LOG_FILE = "/home/alina_grf/progprojects/dadi_adjoint_state/adjoint_state_method/neural_backp.log"
+#print("curdir", os.getcwd())
+
+
+def st_time(func):
+    """
+        st decorator to calculate the total time of a func
+    """
+    def st_func(*args, **keyArgs):
+        t1 = time.time()
+        r = func(*args, **keyArgs)
+        t2 = time.time()
+        execution_time = t2 - t1
+        childLogger.info("Execution time of {}={}".format(func.__name__, execution_time))
+        return r
+    return st_func
 
 
 def _Vfunc_dnu(x, nu, beta=1):
@@ -329,6 +355,7 @@ class NeuralNetwork(object):
             -1])
         self.derivatives['dll_dTheta'] = np.matmul(self.derivatives['dF_dTheta'], self.derivatives['adjoint_field'])
 
+    @st_time
     def update_parameters(self, lr, iterations, data):
         i = 0
         while np.any(np.ndarray.tolist((self.derivatives['dll_dTheta'] > 1e-20))) and i < iterations:
@@ -338,50 +365,107 @@ class NeuralNetwork(object):
             self.compute_weights()
             self.compute_derivatives_dTheta()
             if np.isnan(self.derivatives['dll_dTheta']).any():
-                print("nan grad")
+                childLogger.info("nan grad")
                 return
-            print("Iteration=", i, "Params:", self.parameters['Theta'])
-            i += 1
-        print("Final iteration=", i, "Final Params:", self.parameters['Theta'])
 
         # Just for check convergence
-        # self.forward_propagate(list(self.parameters['Theta'].values()))
-        # self.compute_model()
-        # self.compute_ll(data)
-        # print("iteration=", i, "Likelihood=", self.parameters['ll'], "Params:", self.parameters['Theta'])
+        #     self.forward_propagate(list(self.parameters['Theta'].values()))
+        #     self.compute_model()
+        #     self.compute_ll(data)
+        #     if i == 0 or i % 100 == 0:
+        #         childLogger.info("{}   , {}   ,   {}".format(i, self.parameters['ll'], self.parameters['Theta']))
+            i += 1
+        childLogger.info("Best-fit parameters popt: {}".format(self.parameters['Theta']))
 
     def predict(self, p):
         self.forward_propagate(p)
         self.compute_model()
         return self.parameters['model']
 
+    @st_time
     def fit(self, P, data, lr=0.1, grad_iter=1000):
         # for epoch in range(epochs):
         ll = 0  # stores the ll
         n_c = 0  # stores the number of correct predictions
         failed = 0
         for i in range(0, P.shape[0]):
+            childLogger.info("*********************************\n"
+                             "Initial value of parameter's set P[{}]={}".format(i, P[i]))
             data_predicted_first = self.predict(P[i])
             self.compute_ll(data)
-            print("FIRSTLY LIKELIHOOD=", self.parameters['ll'], "\nFirstly predicted data:", data_predicted_first)
             self.compute_derivatives_dphi(data)
             self.compute_derivatives_dTheta()
+            childLogger.info("Initial Likelihood={}\nInitial predicted data: {}\n".format(self.parameters[
+                                 'll'], data_predicted_first))
+            # childLogger.info("Initial grad=", list(self.derivatives['dll_dTheta']))
+            # print("from print: ", self.derivatives['dll_dTheta'])
             self.update_parameters(lr, grad_iter, data)
+            popt = list(self.parameters['Theta'].values())
             check_bounds = [0 if value > upper or value < lower else 1 for (upper, value, lower)
-                            in zip(self.upper_bound, list(self.parameters['Theta'].values()),
+                            in zip(self.upper_bound, popt,
                                    self.lower_bound)]
-            if np.isnan(list(self.parameters['Theta'].values())).any() or not all(check_bounds):
-                print("BAD params, continue")
+            if np.isnan(popt).any() or not all(check_bounds):
+                childLogger.info("Optimized params beyond bounds, continue")
                 failed += 1
                 continue
 
-            data_predicted_opt = self.predict(list(self.parameters['Theta'].values()))
+            data_predicted_opt = self.predict(popt)
             self.compute_ll(data)
             ll = self.parameters['ll']
             theta = dadi.Inference.optimal_sfs_scaling(data_predicted_opt, data)
-
-            if np.isclose(data_predicted_opt * theta, data, atol=3.0).all():
+            childLogger.info("data:{}\ndata_predicted:{}\nLikelihood:{}"
+                             "\nValue of scaling theta={}".format(data, data_predicted_opt, ll, theta))
+            if np.isclose(data_predicted_opt * theta, data, atol=5.0).all():
                 n_c += 1
-                print("isclose, n_c=", n_c, "with parameters:", self.parameters['Theta'])
-            print('data: ', data, "\ndata_predicted: ", data_predicted_opt, "\nLikelihood: ", ll,
-                  "\nValue of scaling theta=", theta)
+                childLogger.debug("isclose, n_c={}, with parameters:{}\nLikelihood:{}".
+                                  format(n_c, popt, ll))
+                # childLogger.info("Grad", list(self.derivatives['dll_dTheta']))
+        return popt
+
+"""
+# Importing the dataset
+dataset = dadi.Spectrum.from_file('fs_data.fs')
+ns = dataset.sample_sizes  # mask corners
+# 'nu': population size, 'gamma': selection coefficient, 'h': dominance coefficient, 'beta': breeding ratio, 'theta0': 1
+upper_bound = [100, 1, 2, 10, 1]
+lower_bound = [1e-2, 1e-2, -1, 1e-2, 1]
+number_of_traininigs = 5000
+# (training) set of vectors of parameters P:
+# this is our initial guesses for the parameters, which is somewhat arbitrary
+#
+P = list()
+for low, high in zip(lower_bound, upper_bound):
+    # column = scipy.stats.norm(low=low, high=high, size=number_of_traininigs)
+    column = np.random.uniform(low=low, high=high, size=number_of_traininigs)
+    P.append(column)
+
+P = np.asarray(P).T
+# # popt = [2, 0.5, 0.5, 1, 1]
+# {
+#     'nu': 27.57729022447911, 'gamma': 0.4399618218742022, 'h': 0.7428075146906175, 'beta': 1.4079518902437447,
+#     'theta0': 1.0
+#     }
+# P = np.asarray([[27.5, 0.4, 0.7, 1.4, 1]])
+# Defining the model architecture
+time_architecture_initial = 0
+time_architecture_last = 3
+pts = 30
+xx = dadi.Numerics.default_grid(pts)
+# Creating the Network
+adjointer = NeuralNetwork(time_architecture_initial, time_architecture_last, ns, pts, xx, upper_bound,
+                          lower_bound)
+print(P)
+print(P.shape[0])
+print(P[0])
+childLogger = logging.getLogger(__name__)
+childLogger.addHandler(logging.FileHandler('neural_backp.log'))
+# logger = logging.getLogger()
+childLogger.setLevel(10)
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# childLogger.addFormater
+childLogger.debug("number_of_traininigs={}, upper bound={}, lower_bound={}, time_initial={},\ntime_last={}, pts={}"
+                  "lr={}, iter={}".format(number_of_traininigs, upper_bound, lower_bound, time_architecture_initial,
+                                          time_architecture_last, pts, "1e7", 3500))
+
+adjointer.fit(P, dataset, 1e7, 3500)
+"""
