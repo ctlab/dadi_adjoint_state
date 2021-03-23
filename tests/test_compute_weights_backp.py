@@ -44,7 +44,7 @@ class ComputeWeightsTestCase(unittest.TestCase):
         timeline_architecture_last = 3
         # nu, gamma, h, beta = 2, 0.5, 0.5, 1
         Theta = [2, 0.5, 0.5, 1, 1]
-        adjointer = neural_backp_1D.NeuralNetwork(timeline_architecture_initial, timeline_architecture_last, ns, pts)
+        adjointer = neural_backp_1D.AdjointStateMethod(timeline_architecture_initial, timeline_architecture_last, ns, pts)
         adjointer.compute_weights(Theta)
         self.assertEqual(phi_initial.all(), adjointer.parameters['phi0'].all())
         self.assertEqual(M.all(), adjointer.parameters['M'].all())

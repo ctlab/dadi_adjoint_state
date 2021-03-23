@@ -37,8 +37,8 @@ class ForwardPropagateTestCase(unittest.TestCase):
             model_dadi = dadi.Spectrum.from_phi(phi_dadi, ns, [xx], force_direct=True)
             ll_dadi = dadi.Inference.ll_multinom(model_dadi, data)
 
-            adjointer = neural_backp_1D.NeuralNetwork(timeline_architecture_initial, timeline_architecture_last,
-                                                      ns, pts, xx)
+            adjointer = neural_backp_1D.AdjointStateMethod(timeline_architecture_initial, timeline_architecture_last,
+                                                           ns, pts, xx)
             adjointer.forward_propagate(P[i])
             adjointer.compute_model()
             adjointer.compute_ll(data)

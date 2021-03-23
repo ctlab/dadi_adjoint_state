@@ -9,26 +9,25 @@ import scipy.stats
 from scipy.integrate import trapz
 import os
 
-preparentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-log_file = os.path.join(preparentdir, 'test_optimize.log')
+pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+log_file = os.path.join(pre_parent_dir, 'test_optimize.log')
 childLogger = logging.getLogger(__name__)
 childLogger.addHandler(logging.FileHandler(log_file))
 childLogger.setLevel(10)
-# LOG_FILE = "/home/alina_grf/progprojects/dadi_adjoint_state/adjoint_state_method/neural_backp.log"
-#print("curdir", os.getcwd())
 
 
 def st_time(func):
     """
         st decorator to calculate the total time of a func
     """
-    def st_func(*args, **keyArgs):
+    def st_func(*args, **key_args):
         t1 = time.time()
-        r = func(*args, **keyArgs)
+        r = func(*args, **key_args)
         t2 = time.time()
         execution_time = t2 - t1
         childLogger.info("Execution time of {}={}".format(func.__name__, execution_time))
         return r
+
     return st_func
 
 
@@ -180,7 +179,7 @@ def dll_dphi(model, data, n, xx):
     return sum(np.asarray(dmodel_dphi * (data / model - 1)))
 
 
-class NeuralNetwork(object):
+class AdjointStateMethod(object):
     def __init__(self, time_architecture_initial, time_architecture_last, ns, pts, xx, upper_bound,
                  lower_bound):
         """
@@ -258,9 +257,9 @@ class NeuralNetwork(object):
 
         # Initialize the tridiagonal matrix:
         self.parameters['a'], self.parameters['b'], self.parameters['c'], \
-        self.parameters['A'] = calc_tridiag_matrix(self.parameters['phi'], self.dfactor, self.parameters['MInt'],
-                                                   self.parameters['M'], self.parameters['V'], self.dx,
-                                                   self.parameters['Theta']['nu'], self.parameters['delj'])
+            self.parameters['A'] = calc_tridiag_matrix(self.parameters['phi'], self.dfactor, self.parameters['MInt'],
+                                                     self.parameters['M'], self.parameters['V'], self.dx,
+                                                     self.parameters['Theta']['nu'], self.parameters['delj'])
         self.parameters['A_inv'] = calc_inverse_tridiag_matrix(self.parameters['A'])
         self.parameters['dA_dnu'] = calc_dtridiag_dnu(self.parameters['phi'], self.dfactor, self.parameters['dV_dnu'],
                                                       self.dx, self.parameters['Theta']['nu'], self.parameters['M'])
@@ -332,6 +331,7 @@ class NeuralNetwork(object):
 
     def compute_ll(self, data):
         self.parameters['ll'] = dadi.Inference.ll_multinom(self.parameters['model'], data)
+        return self.parameters['ll']
         # self.parameters['ll'] = data * np.log(self.parameters['model']) - self.parameters['model'] - np.log(data)
 
     def compute_derivatives_dphi(self, data):
@@ -354,9 +354,11 @@ class NeuralNetwork(object):
         self.derivatives['dF_dTheta'] += np.matmul(self.parameters['dA_inv_dTheta'], self.parameters['phi_injected'][
             -1])
         self.derivatives['dll_dTheta'] = np.matmul(self.derivatives['dF_dTheta'], self.derivatives['adjoint_field'])
+        return self.derivatives['dll_dTheta']
 
     @st_time
-    def update_parameters(self, lr, iterations, data):
+    def update_parameters(self, lr, iterations):
+        # lr, grad_iter = 0.1, 500
         i = 0
         while np.any(np.ndarray.tolist((self.derivatives['dll_dTheta'] > 1e-20))) and i < iterations:
             #  np.linalg.norm(self.derivatives['dll_dTheta'], ord=1) > 1e-30
@@ -368,22 +370,23 @@ class NeuralNetwork(object):
                 childLogger.info("nan grad")
                 return
 
-        # Just for check convergence
-        #     self.forward_propagate(list(self.parameters['Theta'].values()))
-        #     self.compute_model()
-        #     self.compute_ll(data)
-        #     if i == 0 or i % 100 == 0:
-        #         childLogger.info("{}   , {}   ,   {}".format(i, self.parameters['ll'], self.parameters['Theta']))
+            # Just for check convergence
+            #     self.forward_propagate(list(self.parameters['Theta'].values()))
+            #     self.compute_model()
+            #     self.compute_ll(data)
+            #     if i == 0 or i % 100 == 0:
+            #         childLogger.info("{}   , {}   ,   {}".format(i, self.parameters['ll'], self.parameters['Theta']))
             i += 1
         childLogger.info("Best-fit parameters popt: {}".format(self.parameters['Theta']))
+        return self.derivatives['dll_dTheta']
 
     def predict(self, p):
-        self.forward_propagate(p)
+        self.forward_propagate(p)  # incorporate compute_weights()
         self.compute_model()
         return self.parameters['model']
 
     @st_time
-    def fit(self, P, data, lr=0.1, grad_iter=1000):
+    def fit(self, P, data):
         # for epoch in range(epochs):
         ll = 0  # stores the ll
         n_c = 0  # stores the number of correct predictions
@@ -395,11 +398,9 @@ class NeuralNetwork(object):
             self.compute_ll(data)
             self.compute_derivatives_dphi(data)
             self.compute_derivatives_dTheta()
-            childLogger.info("Initial Likelihood={}\nInitial predicted data: {}\n".format(self.parameters[
-                                 'll'], data_predicted_first))
-            # childLogger.info("Initial grad=", list(self.derivatives['dll_dTheta']))
-            # print("from print: ", self.derivatives['dll_dTheta'])
-            self.update_parameters(lr, grad_iter, data)
+            childLogger.info("Initial Likelihood={}\nInitial predicted data: {}\n".format(self.parameters['ll'],
+                                                                                          data_predicted_first))
+            self.update_parameters(0.1, 500)
             popt = list(self.parameters['Theta'].values())
             check_bounds = [0 if value > upper or value < lower else 1 for (upper, value, lower)
                             in zip(self.upper_bound, popt,
@@ -421,6 +422,7 @@ class NeuralNetwork(object):
                                   format(n_c, popt, ll))
                 # childLogger.info("Grad", list(self.derivatives['dll_dTheta']))
         return popt
+
 
 """
 # Importing the dataset
