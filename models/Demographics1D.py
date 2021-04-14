@@ -21,6 +21,30 @@ def snm(notused, ns, pts):
     fs = Spectrum.from_phi(phi, ns, (xx,))
     return fs
 
+
+def two_epoch_ASM(params, ns, pts, T=3, xx=Numerics.default_grid, initial_t=0):
+    """
+    Instantaneous size change some time ago.
+
+    params = (nu,T)
+    ns = (n1,)
+
+    nu: Ratio of contemporary to ancient population size
+    T: Time in the past at which size change happened (in units of 2*Na
+       generations) [T = t/2*Nref]
+    n1: Number of samples in resulting Spectrum
+    pts: Number of grid points to use in integration.
+    """
+    nu = params[0]
+    # final_t = T
+    xx = xx(pts)
+    # xx = Numerics.default_grid(pts)
+    phi = PhiManip.phi_1D(xx)
+    phi = Integration.one_pop(phi, xx, T, nu, initial_t=initial_t)
+    fs = Spectrum.from_phi(phi, ns, (xx,))
+    return fs
+
+
 def two_epoch(params, ns, pts):
     """
     Instantaneous size change some time ago.
@@ -39,11 +63,11 @@ def two_epoch(params, ns, pts):
     xx = Numerics.default_grid(pts)
     phi = PhiManip.phi_1D(xx)
     print("phi from two_epoch PhiManip.phi_1D", phi)
-    
     phi = Integration.one_pop(phi, xx, T, nu)
     print("phi from two_epoch Integration.one_pop", phi)
     fs = Spectrum.from_phi(phi, ns, (xx,))
     return fs
+
 
 def growth(params, ns, pts):
     """
@@ -68,6 +92,7 @@ def growth(params, ns, pts):
 
     fs = Spectrum.from_phi(phi, ns, (xx,))
     return fs
+
 
 def bottlegrowth(params, ns, pts):
     """
@@ -95,6 +120,7 @@ def bottlegrowth(params, ns, pts):
     fs = Spectrum.from_phi(phi, ns, (xx,))
     return fs
 
+
 def three_epoch(params, ns, pts):
     """
     params = (nuB,nuF,TB,TF)
@@ -115,6 +141,30 @@ def three_epoch(params, ns, pts):
 
     phi = Integration.one_pop(phi, xx, TB, nuB)
     phi = Integration.one_pop(phi, xx, TF, nuF)
+
+    fs = Spectrum.from_phi(phi, ns, (xx,))
+    return fs
+
+
+def three_epoch_ASM(params, ns, pts, xx=Numerics.default_grid, initial_t=0):
+    """
+    params = (nuB,nuF,TB,TF)
+    ns = (n1,)
+
+    nuB: Ratio of bottleneck population size to ancient pop size
+    nuF: Ratio of contemporary to ancient pop size
+    TB: Length of bottleneck (in units of 2*Na generations) (t/2*Nref)
+    TF: Time since bottleneck recovery (in units of 2*Na generations)
+
+    n1: Number of samples in resulting Spectrum
+    pts: Number of grid points to use in integration.
+    """
+    nuB, nuF, TB, TF = params
+    xx = xx(pts)
+    phi = PhiManip.phi_1D(xx)
+
+    phi = Integration.one_pop(phi, xx, TB, nuB, initial_t=initial_t)
+    phi = Integration.one_pop(phi, xx, TF, nuF, initial_t=initial_t)
 
     fs = Spectrum.from_phi(phi, ns, (xx,))
     return fs

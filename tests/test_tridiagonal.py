@@ -54,9 +54,13 @@ class TridiagonalTestCase(unittest.TestCase):
         np.testing.assert_equal(tridiag, tridiag_just_in_place)
         timeline_architecture_initial = 0
         timeline_architecture_last = 3
-        adjointer = neural_backp_1D.AdjointStateMethod(timeline_architecture_initial, timeline_architecture_last,
-                                                       [10], pts, xx)
-        adjointer.forward_propagate([nu, gamma, h, beta, theta0])
+        upper_bound = [100, 1, 1, 10, 1]
+        lower_bound = [1e-2, 1e-2, 1e-2, 1e-2, 1]
+        adjointer = neural_backp_1D.AdjointStateMethod(timeline_architecture_initial, timeline_architecture_last, [10],
+                                                       pts, xx, upper_bound=upper_bound, lower_bound=lower_bound,
+                                                       model='simple_1D_model_func', data=data)
+        adjointer.init_model_params([nu, gamma, h, beta, theta0])
+        adjointer.compute_weights()
 
         for a_dadi, b_dadi, c_dadi in Integration._one_pop_const_params_check_diags(phi, xx, timeline_architecture_last,
                                                                                     nu=nu, gamma=gamma, h=h,

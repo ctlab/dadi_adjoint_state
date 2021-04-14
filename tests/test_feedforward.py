@@ -1,36 +1,17 @@
+import os
 import unittest
 import dadi
-from adjoint_state_method import ASM_analytic1D
 import numpy as np
+from adjoint_state_method import neural_backp_1D
+from models import simple_1D_model, Demographics1D
 from parameterized import parameterized
 
 
 class FeedforwardTestCase(unittest.TestCase):
-    def test_feedforward(self):
-        """
+    def test_feedforward_simple1D_model(self):
+        nu, gamma, h, beta, theta0 = [2, 0.5, 0.5, 1, 1]
         upper_bound = [100, 1, 1, 10, 1]
         lower_bound = [1e-2, 1e-2, 1e-2, 1e-2, 1]
-        number_of_traininigs = 10
-        # (training) set of vectors of parameters P
-        P = list()
-        for low, high in zip(lower_bound, upper_bound):
-            column = np.random.uniform(low=low, high=high, size=number_of_traininigs)
-            P.append(column)
-
-        P = np.asarray(P).T
-
-        data = dadi.Spectrum.from_file('fs_data.fs')
-        ns = data.sample_sizes
-        pts = 19
-        xx = dadi.Numerics.default_grid(pts)
-        dx = np.diff(xx)
-        phi_initial = dadi.PhiManip.phi_1D(xx)
-        timeline_architecture_initial = 0
-        timeline_architecture_last = 100
-
-        for i in range(0, P.shape[0]):
-"""
-        nu, gamma, h, beta, theta0 = 2, 0.5, 0.5, 1, 1
         data = dadi.Spectrum.from_file('fs_data.fs')
         ns = data.sample_sizes
         T = 3
@@ -39,21 +20,34 @@ class FeedforwardTestCase(unittest.TestCase):
         phi = dadi.PhiManip.phi_1D(xx, nu=nu, theta0=theta0, gamma=gamma,
                                    h=h, theta=None,
                                    beta=beta)
-        M = dadi.Integration._Mfunc1D(xx, gamma, h)
-        MInt = dadi.Integration._Mfunc1D((xx[:-1] + xx[1:]) / 2, gamma, h)
-        V = dadi.Integration._Vfunc(xx, nu, beta)
-        VInt = dadi.Integration._Vfunc((xx[:-1] + xx[1:]) / 2, nu, beta)
-        dx = np.diff(xx)
-        dfactor = dadi.Integration._compute_dfactor(dx)
-        delj = dadi.Integration._compute_delj(dx, MInt, VInt)
-        # tridiag = ASM_analytic1D.calc_tridiag_matrix(phi, dfactor, MInt, M, V, dx, nu, delj)
-        # inverse_tridiag = ASM_analytic1D.calc_inverse_tridiag_matrix(tridiag)
+
         phi_dadi = dadi.Integration.one_pop(phi, xx, T, nu, gamma=gamma, h=h, theta0=theta0, initial_t=0, beta=beta)
-        phi, _ = ASM_analytic1D.feedforward([nu, gamma, h, beta, theta0], phi, xx, ns, dx, dfactor, M, MInt, V, 0, T,
-                                            delj)
-        #self.assertEqual(phi_dadi.all(), phi.all())
+        adjointer = neural_backp_1D.AdjointStateMethod(0, T, ns, pts, xx, upper_bound, lower_bound,
+                                                       "simple_1D_model_func", data)
+        adjointer.init_model_params([nu, gamma, h, beta, theta0])
+        phi = adjointer.forward_propagate()
+        print("phi_dadi\n", phi_dadi, "\nphi_feedforward\n", phi)
         np.testing.assert_array_almost_equal(phi_dadi, phi, decimal=1)
-        print("phi_dadi", phi_dadi, "phi_feedforward", phi)
+
+    def test_feedforward_two_epoch(self):
+        nu, T = 15, 20
+        upper_bound = [30, 50]
+        lower_bound = [5, 10]
+        os.chdir(os.path.dirname(os.path.abspath(Demographics1D.__file__)))
+        data = dadi.Spectrum.from_file('fs_data_two_epoch_ASM.fs')
+        ns = data.sample_sizes
+        T = 20
+        pts = 40
+        xx = dadi.Numerics.default_grid(pts)
+        phi = dadi.PhiManip.phi_1D(xx, nu=nu)
+
+        phi_dadi = dadi.Integration.one_pop(phi, xx, T, nu)
+        adjointer = neural_backp_1D.AdjointStateMethod(0, T, ns, pts, xx, upper_bound, lower_bound, "two_epoch_ASM",
+                                                       data)
+        adjointer.init_model_params([nu, T])
+        phi = adjointer.forward_propagate()
+        print("phi_dadi\n", phi_dadi, "\nphi_feedforward\n", phi)
+        np.testing.assert_array_almost_equal(phi_dadi, phi, decimal=1)
 
 
 suite = unittest.TestLoader().loadTestsFromTestCase(FeedforwardTestCase)

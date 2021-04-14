@@ -113,10 +113,11 @@ def _object_func_grad(params, data, model_func, pts,
     xx = xx(pts)
     initial_t = func_kwargs['initial_t']
     final_t = func_kwargs['final_t']
-    adjointer = neural_backp_1D.AdjointStateMethod(initial_t, final_t, ns, pts, xx, upper_bound, lower_bound)
+    adjointer = neural_backp_1D.AdjointStateMethod(initial_t, final_t, ns, pts, xx, upper_bound, lower_bound,
+                                                   "simple_1D_model_func", data)
     adjointer.predict(params_up)  # compute_weghts, forward pass, compute model
     adjointer.compute_derivatives_dphi(data)
-    obj_func_grad = adjointer.compute_derivatives_dTheta()
+    obj_func_grad = adjointer.compute_derivatives_dTheta(data)
     output_stream.write("Gradient of objective function = {}".format(obj_func_grad))
     return obj_func_grad
 
@@ -547,7 +548,7 @@ def ll_per_bin(model, data, missing_model_cutoff=1e-6):
     # Note: Using .data attributes directly saves a little computation time. We
     # use model and data as a whole at least once, to ensure masking is done
     # properly.
-    result = -model.data + data.data * model.log() - gammaln(data + 1.)
+    result = -model.data + data.data_simple_1D * model.log() - gammaln(data + 1.)
     if numpy.all(result.mask == data.mask):
         return result
 
@@ -1238,7 +1239,7 @@ def optimize_cons(p0, data, model_func, pts,
               re-optimize with ll_scale=1.
     """
     if output_file:
-        output_stream = file(output_file, 'w')
+        output_stream = open(output_file, 'a')
     else:
         output_stream = sys.stdout
 

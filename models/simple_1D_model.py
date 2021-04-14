@@ -1,7 +1,7 @@
 import dadi
 
 
-def model_func(params, ns, pts, xx=dadi.Numerics.default_grid, initial_t=0, final_t=3):
+def simple_1D_model_func(params, ns, pts, xx=dadi.Numerics.default_grid, initial_t=0, final_t=3):
     """
     :param params:
     nu: population size
