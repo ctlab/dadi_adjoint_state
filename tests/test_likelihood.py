@@ -1,8 +1,8 @@
 import unittest
 import dadi
-from adjoint_state_method import neural_backp_1D
+from adjoint_state_method import asm_neural_1D
 import numpy as np
-from dadi_code import Integration
+from dadi_torch import Integration
 
 
 class ForwardPropagateTestCase(unittest.TestCase):
@@ -37,8 +37,8 @@ class ForwardPropagateTestCase(unittest.TestCase):
             model_dadi = dadi.Spectrum.from_phi(phi_dadi, ns, [xx], force_direct=True)
             ll_dadi = dadi.Inference.ll_multinom(model_dadi, data)
 
-            adjointer = neural_backp_1D.AdjointStateMethod(timeline_architecture_initial, timeline_architecture_last,
-                                                           ns, pts, xx, upper_bound, lower_bound,
+            adjointer = asm_neural_1D.AdjointStateMethod(timeline_architecture_initial, timeline_architecture_last,
+                                                         ns, pts, xx, upper_bound, lower_bound,
                                                            'simple_1D_model_func', data)
             adjointer.init_model_params(P[i])
             adjointer.predict()

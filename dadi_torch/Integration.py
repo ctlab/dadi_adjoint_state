@@ -1,12 +1,17 @@
 """
 Functions for integrating population frequency spectra.
 """
-
 import logging
-import Integration1D, Integration2D, Misc
-# from dadi_code import Misc
+import os
 
-logger = logging.getLogger('Integration')
+import dadi
+from dadi_torch import Misc, Integration1D, Integration2D
+
+pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+log_file = os.path.join(pre_parent_dir, 'Integration.log')
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.FileHandler(log_file))
+logger.setLevel(10)
 
 # Note that these functions have all be written for xx=yy=zz, so the grids are
 # identical in each direction. That's not essential here, though. The reason we
@@ -103,7 +108,7 @@ def set_timescale_factor(pts, factor=10):
                 'a very quickly growing population), manually set '
                 'dadi.Integration.timescale_factor to a smaller value. '
                 '(Current value is %g.)' % timescale_factor)
-    timescale_factor = Numerics.default_grid(pts)[1] / factor
+    timescale_factor = dadi.Numerics.default_grid(pts)[1] / factor
 
 
 def _inject_mutations_1D(phi, dt, xx, theta0):
@@ -248,7 +253,7 @@ def one_pop(phi, xx, T, nu=torch.tensor(1.0), gamma=torch.tensor(0), h=torch.ten
             In the one_pop case, this is equivalent to not running the
             integration at all.
     """
-    phi = phi.copy()
+    # phi = phi.clone()
 
     # For a one population integration, freezing means just not integrating.
     if frozen:
@@ -262,8 +267,9 @@ def one_pop(phi, xx, T, nu=torch.tensor(1.0), gamma=torch.tensor(0), h=torch.ten
                          'backwards.' % (T, initial_t))
 
     vars_to_check = (nu, gamma, h, theta0, beta)
-    if torch.all([var.ndim == 0 for var in vars_to_check]):
-        print("call for _one_pop_const_params")
+    # torch.tensor(torch.equal(nu, torch.zeros((1,), dtype=torch.float64))))
+    if torch.all(torch.tensor([var.ndim == 0 for var in vars_to_check])):
+        logger.info("call for _one_pop_const_params")
         return _one_pop_const_params(phi, xx, T, nu, gamma, h, theta0,
                                      initial_t, beta)
 
@@ -344,7 +350,7 @@ def two_pops(phi, xx, T, nu1=torch.tensor(1.0), nu2=torch.tensor(1.0), m12=torch
           straightforward. The tricky part will be later doing the extrapolation
           correctly.
     """
-    phi = phi.copy()
+    # phi = phi.copy()
 
     if T - initial_t == 0:
         return phi
@@ -943,12 +949,15 @@ def _one_pop_const_params(phi, xx, T, nu=torch.tensor(1), gamma=torch.tensor(0),
     # outputs_phi_inj = []
     # phi = phi_initial
     n = phi.shape[0]
+    phi_1 = phi.detach().clone()
     while current_t < T:
         this_dt = min(dt, T - current_t)
+        logger.info("phi {}={}".format(phi.requires_grad, phi))
         _inject_mutations_1D(phi, this_dt, xx, theta0)
         # outputs_phi_inj.append(phi)
-        phi_inj = phi
-        r = phi / this_dt
+        phi_inj = phi.clone()
+        logger.info("phi_inj {}={}".format(phi_inj.requires_grad, phi_inj))
+        r = phi.clone() / this_dt
         # phi = TDMAsolver(a, b + 1 / this_dt, c, r)
         phi = tridiag(a, b + 1 / this_dt, c, r, phi, n)
         # outputs_phi.append(phi)
@@ -957,6 +966,8 @@ def _one_pop_const_params(phi, xx, T, nu=torch.tensor(1), gamma=torch.tensor(0),
     # result_phi_inj = torch.stack(outputs_phi_inj, dim=0)
     # print("result", result_phi.shape, result_phi_inj.shape)
     # print("result_phi[0]", result_phi[0])
+    logger.info("phi1-phi={}".format(phi_1-phi))
+    logger.info("phi-phi_inj={}".format(phi - phi_inj))
     return phi, phi_inj
     # return result_phi, result_phi_inj
 

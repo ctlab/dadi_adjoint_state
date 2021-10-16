@@ -1,11 +1,13 @@
 import logging
 import unittest
 import dadi
-from adjoint_state_method import neural_backp_1D, test_torch1
+from adjoint_state_method import asm_neural_1D, test_torch1, asm_torch
 import numpy as np
-from dadi_code import Demographics1D
+from dadi_torch import Demographics1D
 import time
 import os
+
+from models import simulation1D
 
 pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 log_file = os.path.join(pre_parent_dir, 'test_optimize_1d.log')
@@ -172,7 +174,7 @@ class TestOptimizeParamsGradDescent(unittest.TestCase):
     def setUpClass(cls) -> None:
         # P = np.asarray([popt])  # (training) set of vectors of parameters P
         # print("++++++++++", os.curdir, os.getcwd())
-        os.chdir(os.path.dirname(os.path.abspath(Demographics1D.__file__)))
+        os.chdir(os.path.dirname(os.path.abspath(simulation1D.__file__)))
         # ll = dadi.Inference.ll_multinom(cls.data_simple_1D, cls.data_simple_1D)
         # print('**********', ll)
         cls.pts = 30
@@ -186,7 +188,7 @@ class TestOptimizeParamsGradDescent(unittest.TestCase):
         child_logger = logging.getLogger("test_optimize_grad_two_epoch_ASM")
         child_logger.addHandler(logging.FileHandler(log_file))
         child_logger.setLevel(10)
-        P = np.asarray([[[50.], [99.]]])
+        P = np.asarray([[50., 99.]])
         upper_bound = [100., 100.]
         lower_bound = [1., 1.]
         # P_scaled = neural_backp_1D.normalize_parameters(P, upper_bound, lower_bound)
@@ -201,8 +203,8 @@ class TestOptimizeParamsGradDescent(unittest.TestCase):
             child_logger.info('Initial parameters P[{}]={}'.format(i, str(P[i])))
             t1 = time.time()
             print("P[i]={}".format(P[i]))
-            adjointer = test_torch1.AdjointStateMethod(P[i], data_two_epoch_asm, model_func, self.pts, upper_bound,
-                                                       lower_bound)
+            adjointer = asm_torch.AdjointStateMethod(P[i], data_two_epoch_asm, model_func, self.pts, upper_bound,
+                                                     lower_bound)
             adjointer.fit(self.lr, self.grad_iter)
             t2 = time.time()
             execution_time = t2 - t1
@@ -223,10 +225,10 @@ class TestOptimizeParamsGradDescent(unittest.TestCase):
             func = Demographics1D.two_epoch_ASM
             child_logger.info('Initial parameters P[{}]={}'.format(i, str(P[i])))
             t1 = time.time()
-            adjointer = neural_backp_1D.AdjointStateMethod(self.timeline_architecture_initial,
-                                                           self.timeline_architecture_last, ns, self.pts, self.xx,
-                                                           upper_bound, lower_bound, "three_epoch_ASM",
-                                                           data_three_epoch_asm)
+            adjointer = asm_neural_1D.AdjointStateMethod(self.timeline_architecture_initial,
+                                                         self.timeline_architecture_last, ns, self.pts, self.xx,
+                                                         upper_bound, lower_bound, "three_epoch_ASM",
+                                                         data_three_epoch_asm)
 
             popt_asm = adjointer.fit(P, data_three_epoch_asm, self.lr, self.grad_iter)
 

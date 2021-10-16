@@ -9,8 +9,10 @@ import scipy.integrate
 from dadi import Numerics
 
 
-def phi_1D(xx, nu=torch.tensor(1.0), theta0=torch.tensor(1.0), gamma=torch.tensor(0), h=torch.tensor(0.5),
-           theta=None, beta=torch.tensor(1)):
+def phi_1D(xx, nu=torch.tensor(1.0), theta0=torch.tensor(1.0),
+           gamma=torch.tensor(0.),
+           h=torch.tensor(0.5),
+           theta=None, beta=torch.tensor(1.0)):
     """
     One-dimensional phi for a constant-sized population with genic selection.
 

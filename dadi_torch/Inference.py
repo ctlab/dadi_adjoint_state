@@ -2,7 +2,7 @@
 Comparison and optimization of model spectra to data.
 """
 import logging
-from adjoint_state_method import neural_backp_1D
+from adjoint_state_method import asm_neural_1D
 import os, sys
 import time
 import numpy
@@ -126,8 +126,8 @@ def _object_func_grad(params, data, model_func, pts,
         final_t = func_kwargs['final_t']
     elif model_func.__name__ == 'two_epoch_ASM':
         final_t = func_kwargs['T']
-    adjointer = neural_backp_1D.AdjointStateMethod(initial_t, final_t, ns, pts, xx, upper_bound, lower_bound,
-                                                   model=model_func.__name__)
+    adjointer = asm_neural_1D.AdjointStateMethod(initial_t, final_t, ns, pts, xx, upper_bound, lower_bound,
+                                                 model=model_func.__name__)
     adjointer.initialize(params_up)
     adjointer.predict()
     adjointer.compute_derivatives_dphi(data)
@@ -137,7 +137,7 @@ def _object_func_grad(params, data, model_func, pts,
         result.append(i[0])
     result = numpy.asarray(result)
     output_stream.write("Gradient of objective function = {}".format(result))
-    output_stream.write("NORM={}".format(neural_backp_1D.vecnorm(result, ord=2)))
+    output_stream.write("NORM={}".format(asm_neural_1D.vecnorm(result, ord=2)))
 
     if store_thetas:
         #global _theta_store

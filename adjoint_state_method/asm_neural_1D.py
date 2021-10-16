@@ -1,7 +1,5 @@
 import logging
 import time
-from decimal import Decimal
-import torch
 import dadi
 import numpy as np
 import scipy
@@ -13,8 +11,7 @@ import os
 from scipy.misc import derivative
 from sklearn.preprocessing import MinMaxScaler
 # from tensorflow.python.ops import clip_ops
-import dadi_torch
-import models
+
 
 pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 log_file = os.path.join(pre_parent_dir, 'test_optimize.log')
@@ -41,6 +38,7 @@ def st_time(func):
     """
         st decorator to calculate the total time of a func
     """
+
     def st_func(*args, **key_args):
         t1 = time.time()
         r = func(*args, **key_args)
@@ -48,6 +46,7 @@ def st_time(func):
         execution_time = t2 - t1
         child_logger.info("Execution time of {}={}".format(func.__name__, execution_time))
         return r
+
     return st_func
 
 
@@ -242,7 +241,6 @@ def _from_phi_1D_direct_dphi_directly(n, xx, mask_corners=True,
     # ddx = [0]
     # middle = list(np.diff(xx, n=2))
     # ddx += middle + [0]
-
     # n = round(n)
     data = np.zeros(n + 1)  # for example 20 samples, there are 21 element, - 0 - mutations for 0 samples
     for ii in range(0, n + 1):
@@ -262,11 +260,6 @@ def ll_from_phi(phi, xx, ns, data):
 def dll_dphi_analytical(model, data, n, xx):
     """ analytical derivative"""
     dmodel_dphi = _from_phi_1D_direct_dphi_directly(n, xx)  # TODO: alter method in
-    # dadi.Spectrum_mod.py.from_phi for
-    # simultaneous
-    # returninig model and
-    # dphi derivative
-    # return sum(np.asarray((dmodel_dphi * (data - model))/model))
     return sum(np.asarray(dmodel_dphi * (data / model - 1)))
 
 
@@ -298,7 +291,6 @@ class AdjointStateMethod(object):
         self.model_func = model_func
         self.model_name = model_func.__name__
         self.data = data
-
         # input_size is the number of neurons in the first layer i.e. pts[0]
         # output_size is the number of neurons in the last layer i.e. pts[L]
         # Parameters will store the network parameters,
@@ -362,7 +354,6 @@ class AdjointStateMethod(object):
                                                        h=self.parameters['Theta']['h'],
                                                        theta=None,
                                                        beta=self.parameters['Theta']['beta'])
-        # self.parameters['phi0'] = scaler(self.parameters['phi0'])
         phi_Logger.info("initial phi:{}, len={}".format(self.parameters['phi0'], len(self.parameters['phi0'])))
 
     def compute_weights(self, eval=1):
@@ -378,8 +369,6 @@ class AdjointStateMethod(object):
                                                        self.parameters['Theta']['beta'])
             ll_logger.info("dx={}, Mint={}, VInt={}".format(self.dx, self.parameters['MInt'], self.parameters[
                 'VInt']))
-            print(ll_logger.info("dx={}, Mint={}, VInt={}".format(self.dx, self.parameters['MInt'], self.parameters[
-                'VInt'])))
             self.parameters['delj'] = dadi.Integration._compute_delj(self.dx, self.parameters['MInt'], self.parameters[
                 'VInt'])
             self.parameters['dA']['dA_dnuF'] = calc_dtridiag_dnu(self.parameters['phi0'], self.dfactor,
@@ -528,26 +517,19 @@ class AdjointStateMethod(object):
             'gamma'], self.parameters['Theta']['h'])
         current_t = self.initial_t
         self.parameters['phi'] = self.parameters['phi0']
-        # child_logger.info("dt={}, self.parameters['phi']={}".format(dt, self.parameters['phi']))
         while current_t < self.T:
             this_dt = min(dt, self.T - current_t)
             dadi.Integration._inject_mutations_1D(self.parameters['phi'], this_dt, self.xx,
                                                   self.parameters['Theta']['theta0'])
-            # phi_Logger.info("self.parameters['phi'] after inj={}".format(self.parameters['phi']))
-            # self.parameters['phi'] = scaler(self.parameters['phi'])
             self.parameters['phi_injected'].append(self.parameters['phi'])
             r = self.parameters['phi'] / this_dt
             self.parameters['phi'] = dadi.Integration.tridiag.tridiag(self.parameters['a'], self.parameters['b'] + 1
                                                                       / this_dt, self.parameters['c'], r)
             F = self.parameters['phi_injected'] - self.parameters['phi']
             child_logger.info("F functional = {}".format(F))
-            # self.parameters['phi'] = scaler(self.parameters['phi'])
-
-            # phi_Logger.info("self.parameters['phi'] after tridiag={}".format(self.parameters['phi']))
             current_t += this_dt
 
         phi_Logger.info("len of forw_phi={}, forw_phi=\n{}".format(len(self.parameters['phi']), self.parameters['phi']))
-        # child_logger.info("forw_phi=\n{}".format(self.parameters['phi']))
         return self.parameters['phi']
 
     def compute_model(self):
@@ -557,9 +539,8 @@ class AdjointStateMethod(object):
 
     def compute_ll(self, data):
         self.parameters['ll'] = dadi.Inference.ll_multinom(self.parameters['model'], data)
-        # theta = dadi.Inference.optimal_sfs_scaling(self.parameters['model'], data)
-        # phi_Logger.info('ll={}\ntheta={}'.format(self.parameters['ll'], theta))
-        child_logger.info("compute_ll self.parameters['model']={}\nll={}".format(self.parameters['model'],self.parameters['ll']))
+        child_logger.info(
+            "compute_ll self.parameters['model']={}\nll={}".format(self.parameters['model'], self.parameters['ll']))
         return self.parameters['ll']
 
     def compute_derivatives_dphi(self, data):
@@ -567,15 +548,13 @@ class AdjointStateMethod(object):
          Partial derivatives of the cost function with respect to phi and adjoint field:
          adjoint-state lagrange multipliers = adjoint_field
         """
-        # self.derivatives['dll_dphi'] = dll_dphi_analytical(self.parameters['model'], data, self.ns[0], self.xx)
         self.derivatives['dll_dphi'] = dll_dphi_numeric(self.parameters['phi'], data, self.ns[0], self.xx)
-        # phi_Logger.info('dll_dphi_analytical={}'.format(self.derivatives['dll_dphi']))
         phi_Logger.info('dll_dphi_numeric={}'.format(self.derivatives['dll_dphi']))
 
         self.derivatives['adjoint_field'] = np.multiply(self.derivatives['dF_dphi'].T,
                                                         np.asarray(self.derivatives['dll_dphi']))
         phi_Logger.info("adjoint_field {}={}".format(self.derivatives['adjoint_field'].shape, self.derivatives[
-                                                         'adjoint_field']))
+            'adjoint_field']))
 
     def compute_derivatives_dTheta(self, data, lr, eval=1):
         """ assuming to update weights before call compute_derivatives_dTheta
@@ -585,45 +564,13 @@ class AdjointStateMethod(object):
         self.derivatives['dll_dTheta'] = np.zeros([len(popt_list), 1])
 
         for phi_inj in self.parameters['phi_injected']:
-            if eval == 1:
-                phi_inj += lr * self.derivatives['dll_dphi']
-            # print("phi_inj", phi_inj)
             self.derivatives['dF_dTheta'] += np.matmul(self.parameters['dA_inv_dTheta'], phi_inj)
             self.derivatives['dF_dTheta'] = np.matmul(self.derivatives['dF_dTheta'],
                                                       self.parameters['A_inv'])
-        # print("compute_derivatives_dTheta: self.derivatives['dF_dTheta'] = ", self.derivatives['dF_dTheta'])
-        # print("compute_derivatives_dTheta: tanh self.derivatives['dF_dTheta'] = ", np.tanh(self.derivatives[
-        # 'dF_dTheta']))
-        # self.derivatives['dll_dTheta'] = np.matmul(np.tanh(self.derivatives['dF_dTheta']),
-        #                                            self.derivatives['adjoint_field'])
-        # phi_Logger.info("self.derivatives['dF_dTheta'] before scaling={}, shape {}".format(self.derivatives[
-        #                                                                                       'dF_dTheta'],
-        #                                                                                    self.derivatives[
-        #                                                                                        'dF_dTheta'].shape))
-        # self.derivatives['dF_dTheta'] = scaler(self.derivatives['dF_dTheta'][0])
-        # self.derivatives['dF_dTheta'] = np.reshape(self.derivatives['dF_dTheta'], (1, -1))
-        # self.derivatives['dF_dTheta'].reshape(self.derivatives['dF_dTheta'].shape[0], 1)
+
         phi_Logger.info("self.derivatives['dF_dTheta'] ={}, shape {}".
-                       format(self.derivatives['dF_dTheta'], self.derivatives['dF_dTheta'].shape))
+                        format(self.derivatives['dF_dTheta'], self.derivatives['dF_dTheta'].shape))
         self.derivatives['dll_dTheta'] = np.matmul(self.derivatives['dF_dTheta'], self.derivatives['adjoint_field'])
-        phi_Logger.info("EXACT self.derivatives['dll_dTheta']={}".format(self.derivatives['dll_dTheta']))
-        #
-        # return self.derivatives['dll_dTheta']
-        # grad_approx = dadi_torch.Inference.approx_grad_scipy(np.asarray(list(self.parameters['Theta'].values())), data,
-        #                                                     models.Demographics1D.two_epoch,
-        #                                                     self.pts,
-        #                                                     lower_bound=self.lower_bound,
-        #                                                     upper_bound=self.upper_bound,
-        #                                                     verbose=0, flush_delay=0.5, gtol=1e-5, multinom=True,
-        #                                                     maxiter=None, full_output=False,
-        #                                                     func_args=[], func_kwargs={}, fixed_params=None,
-        #                                                     ll_scale=1, output_file=None)
-        #
-        # self.derivatives['dll_dTheta'] = [[x] for x in grad_approx]
-        # phi_Logger.info("APPROX self.derivatives['dll_dTheta']={}".format(self.derivatives['dll_dTheta']))
-        # self.derivatives['dF_dTheta'] = np.matmul(self.derivatives['dll_dTheta'], self.derivatives['adjoint_field'].T)
-        # phi_Logger.info("Supposed self.derivatives['dF_dTheta']={}\nshape={}".format(self.derivatives['dF_dTheta'],
-        #                                                                              self.derivatives['dF_dTheta'].shape))
         return self.derivatives['dll_dTheta']
 
     def update_parameters(self, lr, iterations, data, theta):
@@ -663,7 +610,6 @@ class AdjointStateMethod(object):
         ll = 0  # stores the ll
         n_c = 0  # stores the number of correct predictions
         failed = 0
-        print("P.shape[0]", P.shape[0])
         for i in range(0, P.shape[0]):
             child_logger.info("*********************************\n"
                               "Initial value of parameter's set P[{}]={}".format(i, P[i]))
@@ -694,5 +640,4 @@ class AdjointStateMethod(object):
                 n_c += 1
                 child_logger.debug("isclose, n_c={}, with parameters:{}\nLikelihood:{}".
                                    format(n_c, popt, ll))
-                # childLogger.info("Grad", list(self.derivatives['dll_dTheta']))
         return popt

@@ -42,4 +42,5 @@ def draw_comparison(n_samples, ymin=None):
     plt.legend(loc=0)
     plt.show()
 
+
 draw_comparison(5)

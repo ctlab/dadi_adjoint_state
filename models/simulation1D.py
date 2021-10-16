@@ -1,7 +1,6 @@
 import dadi
 import torch
-from models import simple_1D_model
-from dadi_code import Demographics1D
+from dadi_torch import Demographics1D
 import os
 
 
@@ -74,31 +73,6 @@ def sim_three_epoch_ASM(ns, pts):
     print("data", data)
     print('Maximum log composite likelihood: {}'.format(max_ll))
     print('likelihood by itself: {}'.format(itself))
-    return data, model
-
-
-def sim_simple_1D_model(ns, pts):
-    """
-    Maximum log composite likelihood: -58.322867089216686
-    Simulated data saved to fs_data.fs
-    Optimal value of theta: 200.00000000000003
-    Size of the ancestral population: 100
-    """
-    # popt = [0.27837367185496886, 0.5014100470515623, 0.5031079363129781, 1.0024980565219934, 1.0]
-    popt = [1, 0.5001112676618237, 0.49913154400601545, 1.0003446032649062, 1.0]
-    # popt = [3, 0.5, 0.5, 1, 1]
-    Nanc = 100
-    theta = 4 * mu * L * Nanc  # mutation flux
-    print("theta", theta)
-    # Get maximum log-likelihood
-    model = simple_1D_model.simple_1D_model_func(popt, ns, pts)
-    data = model * theta
-    max_ll = dadi.Inference.ll_multinom(model, data)
-    ll_from_data = dadi.Inference.ll_multinom(data, data)
-    print("simple_1D_model", model)
-    print("data", data)
-    print('Maximum log composite likelihood: {}'.format(max_ll))
-    print('LL from data: {}'.format(ll_from_data))
     return data, model
 
 

@@ -7,9 +7,8 @@ import torch
 from dadi import Numerics, PhiManip
 from dadi.Spectrum_mod import Spectrum
 from sklearn.preprocessing import MinMaxScaler
-
-import dadi_code
-from dadi_code import Integration, PhiManip
+import dadi_torch
+from dadi_torch import Integration, PhiManip
 
 
 def snm(notused, ns, pts):
@@ -76,14 +75,14 @@ def torch_scaler(tensor):
 #     # final_t = T
 #     xx = torch.as_tensor(xx(pts))
 #     # xx = Numerics.default_grid(pts)
-#     phi = dadi_code.PhiManip.phi_1D_genic(xx, nu=nu, theta0=theta0, gamma=gamma, theta=theta, beta=beta)
+#     phi = dadi_torch.PhiManip.phi_1D_genic(xx, nu=nu, theta0=theta0, gamma=gamma, theta=theta, beta=beta)
 #     # print("phi.phi_1D_genic={}".format(phi))
 #     # phi = PhiManip.phi_1D(xx, nu=nu, gamma=gamma, h=h, theta=theta, beta=beta)
 #     print("phi size", phi.shape)
 #     # phi_initial = torch_scaler(phi)
 #     phi_initial = phi
 #     # phi = Integration.one_pop(phi, xx, T, nu=nu, gamma=gamma, h=h, theta0=theta0, initial_t=initial_t, beta=1)
-#     phi, phi_inj = dadi_code.Integration._one_pop_const_params(phi, xx, T, nu=nu, gamma=gamma,
+#     phi, phi_inj = dadi_torch.Integration._one_pop_const_params(phi, xx, T, nu=nu, gamma=gamma,
 #                                                                h=h, theta0=theta0, initial_t=initial_t, beta=beta)
 #     #print("phi", phi, "\nns", ns, "xx", xx.shape)
 #     fs = Spectrum.from_phi(phi.detach().numpy(), ns, (xx.detach().numpy(),), mask_corners=True, force_direct=True)
@@ -107,11 +106,11 @@ def two_epoch(params, ns, pts):
     nu, T = params[0][0], params[1][0]
     print("params two_epoch: nu {}, T {}, type {}, ndim {}".format(nu, T, type(nu), nu.ndim))
     xx = Numerics.default_grid(pts)
-    phi = dadi_code.PhiManip.phi_1D(torch.as_tensor(xx), nu=nu, h=torch.tensor(0.6))
-    # phi = dadi_code.PhiManip.phi_1D_genic(torch.as_tensor(xx), nu=nu)
+    phi = dadi_torch.PhiManip.phi_1D(torch.as_tensor(xx), nu=nu, h=torch.tensor(0.6))
+    # phi = dadi_torch.PhiManip.phi_1D_genic(torch.as_tensor(xx), nu=nu)
     # print("phi INITial from two_epoch PhiManip.phi_1D_genic", phi)
     # phi = dadi.Integration.one_pop(phi, xx, T, nu)
-    phi, _ = dadi_code.Integration._one_pop_const_params(phi, torch.as_tensor(xx), T, nu=nu)
+    phi, _ = dadi_torch.Integration._one_pop_const_params(phi, torch.as_tensor(xx), T, nu=nu)
     # print("phi from two_epoch Integration.one_pop", phi)
     fs = Spectrum.from_phi(phi.detach().numpy(), ns, (xx,))
     print("fs={}".format(fs))

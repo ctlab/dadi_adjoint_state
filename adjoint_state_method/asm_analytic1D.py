@@ -467,27 +467,3 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, theta0, initial_phi, ini
     # except:
     #    logging.exception("Unexpected error")
 
-"""
-a = np.zeros(initial_phi.shape)
-a[1:] += dfactor[1:] * (-MInt * delj - V[:-1] / (2 * dx))
-
-print("grad a gamma", np.gradient(a, gamma))
-print("grad a h", np.gradient(a, h))
-print("grad a nu", np.gradient(a, nu))
-print("grad a beta", np.gradient(a, beta))
-
-c = np.zeros(initial_phi.shape)
-c[:-1] += -dfactor[:-1] * (-MInt * (1 - delj) + V[1:] / (2 * dx))
-print("grad c gamma", np.gradient(c, gamma))
-print("grad c h", np.gradient(c, h))
-print("grad c nu", np.gradient(c, nu))
-print("grad c beta", np.gradient(c, beta))
-
-b = np.zeros(initial_phi.shape)
-b[:-1] += -dfactor[:-1] * (-MInt * delj - V[:-1] / (2 * dx))
-b[1:] += dfactor[1:] * (-MInt * (1 - delj) + V[1:] / (2 * dx))
-print("grad b gamma", np.gradient(b, gamma))
-print("grad b h", np.gradient(b, h))
-print("grad b nu", np.gradient(b, nu))
-print("grad b beta", np.gradient(b, beta))
-"""

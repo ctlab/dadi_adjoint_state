@@ -1,6 +1,5 @@
 import torch
-import Integration
-import Integration_shared
+from dadi_torch import Integration, Integration_shared
 
 
 def implicit_2Dx(phi, xx, yy, nu1, m12, gamma1, h1, dt, use_delj_trick):

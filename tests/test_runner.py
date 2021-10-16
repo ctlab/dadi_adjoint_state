@@ -1,5 +1,5 @@
 import unittest
-from tests import test_optimize
+from tests import test_optimize1D
 
 # calcTestSuite = unittest.TestSuite()
 # # calcTestSuite.addTest(unittest.makeSuite(test_optimize.TestOptimizeParamsBFGS))
@@ -9,7 +9,8 @@ from tests import test_optimize
 # runner.run(calcTestSuite)
 
 testLoad = unittest.TestLoader()
-suites = testLoad.loadTestsFromName('tests.test_optimize.TestOptimizeParamsGradDescent.test_optimize_simple1D_model')
+suites = testLoad.loadTestsFromName('tests.test_optimize1D.TestOptimizeParamsGradDescent.test_optimize_two_epoch')
+# suites = testLoad.loadTestsFromName('tests.test_optimize2D.TestOptimizeParamsGradDescent.test_optimize_bottlegrowth')
 # suites = testLoad.loadTestsFromName(
 # 'tests.test_optimize.TestOptimizeParamsGradDescent.test_optimize_grad_two_epoch_ASM')
 # suites = testLoad.loadTestsFromName(

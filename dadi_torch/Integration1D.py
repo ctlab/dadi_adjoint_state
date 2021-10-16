@@ -1,6 +1,5 @@
 import torch
-import Integration_shared
-import Integration
+from dadi_torch import Integration_shared, Integration
 
 
 # def tridiag(a, b, c, r, u, n):
