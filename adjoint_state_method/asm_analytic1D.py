@@ -249,7 +249,7 @@ def calc_target_grad(dF_dtheta, adjoint_field):
 def _from_phi_1D_direct(phi, n, xx, mask_corners=True,
                         het_ascertained=None):
     """
-    Compute sample Spectrum from population frequency distribution phi.
+    Compute sample Spectrum_mod.py from population frequency distribution phi.
     ns: Sequence of P sample sizes for each population.
     xx: Sequence of P one-dimensional grids on which phi is defined.
     See from_phi for explanation of arguments.
@@ -267,7 +267,7 @@ def _from_phi_1D_direct(phi, n, xx, mask_corners=True,
 def _from_phi_1D_direct_dphi_analytical(n, xx, dfactor, mask_corners=True,
                              het_ascertained=None):
     """
-    Compute sample Spectrum from population frequency distribution phi.
+    Compute sample Spectrum_mod.py from population frequency distribution phi.
     See from_phi for explanation of arguments.
     """
     """ test failed """
@@ -288,7 +288,7 @@ def _from_phi_1D_direct_dphi_analytical(n, xx, dfactor, mask_corners=True,
 def _from_phi_1D_direct_dphi_directly(n, xx, mask_corners=True,
                                       het_ascertained=None):
     """
-    Compute derivative from sample Spectrum from population frequency distribution phi.
+    Compute derivative from sample Spectrum_mod.py from population frequency distribution phi.
     See from_phi for explanation of arguments.
     """
     n = round(n)
@@ -304,7 +304,9 @@ def _from_phi_1D_direct_dphi_directly(n, xx, mask_corners=True,
 def calc_objective_func(phi, xx, ns, observed_spectrum):
     """ objective_func = ll"""
     model = _from_phi_1D_direct(phi, ns, xx)
-    obj_func = observed_spectrum * np.log(model) - model - np.log(observed_spectrum)
+    # obj_func = dadi.Inference.ll_multinom_per_bin(model, observed_spectrum)
+    obj_func = dadi.Inference.ll_multinom(model, observed_spectrum)
+    # obj_func = observed_spectrum * np.log(model) - model - np.log(observed_spectrum)
     return obj_func
 
 
@@ -424,10 +426,10 @@ def main(observed_spectrum, ns, xx, nu, gamma, h, beta, theta0, initial_phi, ini
 
 # if __name__ == "__main__":
 
-    # ns: Sample size of resulting Spectrum
+    # ns: Sample size of resulting Spectrum_mod.py
     # pts: Number of grid points to use in integration.
     """
-    data = dadi.Spectrum.from_file('fs_data.fs')
+    data = dadi.Spectrum_mod.py.from_file('fs_data.fs')
     ns = data.sample_sizes  # mask corners
     print("ns", ns)
     pts = 19
