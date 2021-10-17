@@ -1,6 +1,6 @@
 import dadi
 import torch
-from dadi_torch import Demographics1D
+import Demographics1D
 import os
 
 

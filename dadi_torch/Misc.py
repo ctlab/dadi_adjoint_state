@@ -801,7 +801,7 @@ def fragment_data_dict(dd, chunk_size):
 
 import numpy as np
 import random
-from .Spectrum_mod import Spectrum
+from Spectrum_mod import Spectrum
 import functools, operator
 
 def bootstraps_from_dd_chunks(fragments, Nboot, pop_ids, projections, mask_corners=True, polarized=True):

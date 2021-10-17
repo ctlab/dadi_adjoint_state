@@ -2,7 +2,7 @@
 Comparison and optimization of model spectra to data.
 """
 import logging
-from adjoint_state_method import asm_neural_1D
+import asm_neural_1D
 import os, sys
 import time
 import numpy

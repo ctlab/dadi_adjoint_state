@@ -8,8 +8,7 @@ import os
 import numpy as np
 from torch import nn
 
-import dadi_torch
-from dadi_torch import PhiManip, Inference, Demographics2D, Demographics1D
+import PhiManip, Inference, Demographics1D
 from sklearn.preprocessing import MinMaxScaler
 
 pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -5,7 +5,7 @@ import logging
 import os
 
 import dadi
-from dadi_torch import Misc, Integration1D, Integration2D
+import Misc, Integration1D, Integration2D
 
 pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 log_file = os.path.join(pre_parent_dir, 'Integration.log')

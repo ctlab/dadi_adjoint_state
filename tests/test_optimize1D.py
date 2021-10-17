@@ -1,13 +1,12 @@
 import logging
 import unittest
 import dadi
-from adjoint_state_method import asm_neural_1D, test_torch1, asm_torch
+import asm_neural_1D, asm_torch
 import numpy as np
-from dadi_torch import Demographics1D
+import Demographics1D
 import time
 import os
-
-from models import simulation1D
+import simulation1D
 
 pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 log_file = os.path.join(pre_parent_dir, 'test_optimize_1d.log')

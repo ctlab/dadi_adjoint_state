@@ -7,8 +7,7 @@ import torch
 from dadi import Numerics, PhiManip
 from dadi.Spectrum_mod import Spectrum
 from sklearn.preprocessing import MinMaxScaler
-import dadi_torch
-from dadi_torch import Integration, PhiManip
+import Integration, PhiManip
 
 
 def snm(notused, ns, pts):
