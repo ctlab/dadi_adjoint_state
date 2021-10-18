@@ -76,21 +76,21 @@ class AdjointStateMethod(nn.Module):
         child_logger.info("self.p0={}, shape={}".format(self.p0, p0.shape))
         self.model = model_func(self.p0.data, self.ns, self.pts)
         self.xx = torch.as_tensor(dadi.Numerics.default_grid(self.pts))
-        self.phi_initial = PhiManip.phi_1D(self.xx)
+        self.phi = PhiManip.phi_1D(self.xx, nu=self.p0[0][0])
         if len(self.ns) == 2:
-            self.phi_initial = dadi.PhiManip.phi_1D_to_2D(self.xx, self.phi_initial)
+            self.phi = dadi.PhiManip.phi_1D_to_2D(self.xx, self.phi)
         # self.phi = self.phi_initial.clone().detach().requires_grad_(True)
-        child_logger.info("self.phi_initial {}={}".format(type(self.phi_initial), self.phi_initial))
+        child_logger.info("self.phi_initial {}={}".format(type(self.phi), self.phi))
         self.ll = torch.tensor(Inference.ll_multinom(self.model, self.data))
         # self.ll.requires_grad=True
-        self.F = torch.zeros(self.phi_initial.shape)  # torch.zeros((1, self.pts,))
+        self.F = torch.zeros(self.phi.shape)  # torch.zeros((1, self.pts,))
         # self.F.requires_grad = True
         self.derivatives = {'dF_dphi': torch.tensor([-1], dtype=torch.float64)}  # np.asarray([-1 * np.ones(self.pts)])}
 
     def forward(self):
         if len(self.ns) == 1:
-            self.phi, self.phi_inj = Integration.one_pop(self.phi_initial, self.xx,
-                                                         self.p0[-1][0], nu=self.p0[0][0])
+            self.phi, self.phi_inj = Integration.one_pop(self.phi, self.xx,
+                                                         self.p0.data[-1][0], nu=self.p0.data[0][0])
             # gamma=self.p0[1],
             # h=self.p0[2], theta0=torch.tensor(1),
             # initial_t=self.initial_t, beta=self.p0[3])
@@ -194,11 +194,11 @@ class AdjointStateMethod(nn.Module):
             self.compute_derivatives_dphi()
             self.compute_derivatives_dTheta(lr, eval=0)
             self.update_parameters(lr, iterations)
-        check_bounds = [0 if value > upper or value < lower else 1 for (upper, value, lower)
+        check_bounds = [1 if value > upper or value < lower else 0 for (upper, value, lower)
                         in zip(self.upper_bound, self.p0, self.lower_bound)]
         child_logger.info("check bounds={}".format(check_bounds))
-        if torch.isnan(self.p0).any() or not all(check_bounds):
-            child_logger.info("Optimized params beyond bounds")
+        if torch.isnan(self.p0).any() or any(check_bounds):
+            child_logger.info("Optimized params beyond bounds: {}, {}, {}".format(self.upper_bound, self.p0, self.lower_bound))
             failed += 1
 
         self.forward()

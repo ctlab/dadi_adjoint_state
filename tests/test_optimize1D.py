@@ -180,7 +180,7 @@ class TestOptimizeParamsGradDescent(unittest.TestCase):
         cls.xx = dadi.Numerics.default_grid(cls.pts)
         cls.timeline_architecture_initial = 0
         cls.timeline_architecture_last = 8
-        cls.lr = 10
+        cls.lr = 1e10
         cls.grad_iter = 100
 
     def test_optimize_two_epoch(self):
@@ -202,8 +202,7 @@ class TestOptimizeParamsGradDescent(unittest.TestCase):
             child_logger.info('Initial parameters P[{}]={}'.format(i, str(P[i])))
             t1 = time.time()
             print("P[i]={}".format(P[i]))
-            adjointer = asm_torch.AdjointStateMethod(P[i], data_two_epoch_asm, model_func, self.pts, upper_bound,
-                                                     lower_bound)
+            adjointer = asm_torch.AdjointStateMethod(P[i], data_two_epoch_asm, model_func, self.pts, lower_bound, upper_bound)
             adjointer.fit(self.lr, self.grad_iter)
             t2 = time.time()
             execution_time = t2 - t1

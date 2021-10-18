@@ -269,7 +269,7 @@ def one_pop(phi, xx, T, nu=torch.tensor(1.0), gamma=torch.tensor(0), h=torch.ten
     vars_to_check = (nu, gamma, h, theta0, beta)
     # torch.tensor(torch.equal(nu, torch.zeros((1,), dtype=torch.float64))))
     if torch.all(torch.tensor([var.ndim == 0 for var in vars_to_check])):
-        logger.info("call for _one_pop_const_params")
+        # logger.info("call for _one_pop_const_params")
         return _one_pop_const_params(phi, xx, T, nu, gamma, h, theta0,
                                      initial_t, beta)
 
@@ -949,14 +949,14 @@ def _one_pop_const_params(phi, xx, T, nu=torch.tensor(1), gamma=torch.tensor(0),
     # outputs_phi_inj = []
     # phi = phi_initial
     n = phi.shape[0]
-    phi_1 = phi.detach().clone()
+    # phi_1 = phi.detach().clone()
     while current_t < T:
         this_dt = min(dt, T - current_t)
-        logger.info("phi {}={}".format(phi.requires_grad, phi))
+        # logger.info("phi {}={}".format(phi.requires_grad, phi))
         _inject_mutations_1D(phi, this_dt, xx, theta0)
         # outputs_phi_inj.append(phi)
         phi_inj = phi.clone()
-        logger.info("phi_inj {}={}".format(phi_inj.requires_grad, phi_inj))
+        # logger.info("phi_inj {}={}".format(phi_inj.requires_grad, phi_inj))
         r = phi.clone() / this_dt
         # phi = TDMAsolver(a, b + 1 / this_dt, c, r)
         phi = tridiag(a, b + 1 / this_dt, c, r, phi, n)
@@ -966,8 +966,8 @@ def _one_pop_const_params(phi, xx, T, nu=torch.tensor(1), gamma=torch.tensor(0),
     # result_phi_inj = torch.stack(outputs_phi_inj, dim=0)
     # print("result", result_phi.shape, result_phi_inj.shape)
     # print("result_phi[0]", result_phi[0])
-    logger.info("phi1-phi={}".format(phi_1-phi))
-    logger.info("phi-phi_inj={}".format(phi - phi_inj))
+    # logger.info("phi1-phi={}".format(phi_1-phi))
+    # logger.info("phi-phi_inj={}".format(phi - phi_inj))
     return phi, phi_inj
     # return result_phi, result_phi_inj
 
