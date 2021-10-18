@@ -4,10 +4,10 @@ Single population demographic models.
 import dadi
 import numpy
 import torch
-from dadi import Numerics, PhiManip
 from dadi.Spectrum_mod import Spectrum
 from sklearn.preprocessing import MinMaxScaler
-import Integration, PhiManip
+import Integration
+import PhiManip
 
 
 def snm(notused, ns, pts):
@@ -19,7 +19,7 @@ def snm(notused, ns, pts):
     n1: Number of samples in resulting Spectrum_mod.py
     pts: Number of grid points to use in integration.
     """
-    xx = Numerics.default_grid(pts)
+    xx = dadi.Numerics.default_grid(pts)
     phi = PhiManip.phi_1D(xx)
 
     fs = Spectrum.from_phi(phi, ns, (xx,))
@@ -104,12 +104,12 @@ def two_epoch(params, ns, pts):
     print("params", params)
     nu, T = params[0][0], params[1][0]
     print("params two_epoch: nu {}, T {}, type {}, ndim {}".format(nu, T, type(nu), nu.ndim))
-    xx = Numerics.default_grid(pts)
-    phi = dadi_torch.PhiManip.phi_1D(torch.as_tensor(xx), nu=nu, h=torch.tensor(0.6))
+    xx = dadi.Numerics.default_grid(pts)
+    phi = PhiManip.phi_1D(torch.as_tensor(xx), nu=nu, h=torch.tensor(0.6))
     # phi = dadi_torch.PhiManip.phi_1D_genic(torch.as_tensor(xx), nu=nu)
     # print("phi INITial from two_epoch PhiManip.phi_1D_genic", phi)
     # phi = dadi.Integration.one_pop(phi, xx, T, nu)
-    phi, _ = dadi_torch.Integration._one_pop_const_params(phi, torch.as_tensor(xx), T, nu=nu)
+    phi, _ = Integration._one_pop_const_params(phi, torch.as_tensor(xx), T, nu=nu)
     # print("phi from two_epoch Integration.one_pop", phi)
     fs = Spectrum.from_phi(phi.detach().numpy(), ns, (xx,))
     print("fs={}".format(fs))
@@ -131,7 +131,7 @@ def growth(params, ns, pts):
     """
     nu, T = params
 
-    xx = Numerics.default_grid(pts)
+    xx = dadi.Numerics.default_grid(pts)
     phi = PhiManip.phi_1D(xx)
 
     nu_func = lambda t: numpy.exp(numpy.log(nu) * t / T)
@@ -158,7 +158,7 @@ def bottlegrowth(params, ns, pts):
     """
     nuB, nuF, T = params
 
-    xx = Numerics.default_grid(pts)
+    xx = dadi.Numerics.default_grid(pts)
     phi = PhiManip.phi_1D(xx)
 
     nu_func = lambda t: nuB * numpy.exp(numpy.log(nuF / nuB) * t / T)
@@ -183,7 +183,7 @@ def three_epoch(params, ns, pts):
     """
     nuB, nuF, TB, TF = params
 
-    xx = Numerics.default_grid(pts)
+    xx = dadi.Numerics.default_grid(pts)
     phi = PhiManip.phi_1D(xx)
 
     phi = Integration.one_pop(phi, xx, TB, nuB)
@@ -193,7 +193,7 @@ def three_epoch(params, ns, pts):
     return fs
 
 
-def three_epoch_ASM(params, ns, pts, xx=Numerics.default_grid, initial_t=0):
+def three_epoch_ASM(params, ns, pts, xx=dadi.Numerics.default_grid, initial_t=0):
     """
     params = (nuB,nuF,TB,TF)
     ns = (n1,)

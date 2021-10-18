@@ -8,14 +8,15 @@ import os
 import numpy as np
 from torch import nn
 
-import PhiManip, Inference, Demographics1D
+import PhiManip, Inference, Demographics1D, Integration, Spectrum_mod
 from sklearn.preprocessing import MinMaxScaler
 
 pre_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-log_file = os.path.join(pre_parent_dir, 'test_torch2.log')
+log_file = os.path.join(pre_parent_dir, 'asm_torch.log')
 child_logger = logging.getLogger(__name__)
 child_logger.addHandler(logging.FileHandler(log_file))
 child_logger.setLevel(10)
+
 
 # phi_file = os.path.join(pre_parent_dir, 'phi.log')
 # child_logger = logging.getLogger('phi_log')
@@ -38,8 +39,8 @@ def _from_phi_1D_direct_dphi_directly(n, xx, mask_corners=True,
 
 
 def ll_from_phi(phi, xx, ns, data):
-    model = dadi_torch.Spectrum_mod.Spectrum.from_phi(phi, [ns], [xx], force_direct=True)
-    return dadi_torch.Inference.ll_multinom(model, data)
+    model = Spectrum_mod.Spectrum.from_phi(phi, [ns], [xx], force_direct=True)
+    return Inference.ll_multinom(model, data)
 
 
 def dll_dphi_numeric(phi, data, n, xx):
@@ -75,36 +76,36 @@ class AdjointStateMethod(nn.Module):
         child_logger.info("self.p0={}, shape={}".format(self.p0, p0.shape))
         self.model = model_func(self.p0.data, self.ns, self.pts)
         self.xx = torch.as_tensor(dadi.Numerics.default_grid(self.pts))
-        self.phi_initial = dadi_torch.PhiManip.phi_1D(self.xx)
+        self.phi_initial = PhiManip.phi_1D(self.xx)
         if len(self.ns) == 2:
             self.phi_initial = dadi.PhiManip.phi_1D_to_2D(self.xx, self.phi_initial)
         # self.phi = self.phi_initial.clone().detach().requires_grad_(True)
         child_logger.info("self.phi_initial {}={}".format(type(self.phi_initial), self.phi_initial))
-        self.ll = torch.tensor(dadi_torch.Inference.ll_multinom(self.model, self.data))
+        self.ll = torch.tensor(Inference.ll_multinom(self.model, self.data))
         # self.ll.requires_grad=True
         self.F = torch.zeros(self.phi_initial.shape)  # torch.zeros((1, self.pts,))
         # self.F.requires_grad = True
-        self.derivatives = {'dF_dphi': torch.tensor([-1], dtype=torch.float64)}# np.asarray([-1 * np.ones(self.pts)])}
+        self.derivatives = {'dF_dphi': torch.tensor([-1], dtype=torch.float64)}  # np.asarray([-1 * np.ones(self.pts)])}
 
     def forward(self):
         if len(self.ns) == 1:
-            self.phi, self.phi_inj = dadi_torch.Integration.one_pop(self.phi_initial, self.xx,
-                                                                    self.p0[-1][0], nu=self.p0[0][0])
-                                                                             # gamma=self.p0[1],
-                                                                             # h=self.p0[2], theta0=torch.tensor(1),
-                                                                             # initial_t=self.initial_t, beta=self.p0[3])
+            self.phi, self.phi_inj = Integration.one_pop(self.phi_initial, self.xx,
+                                                         self.p0[-1][0], nu=self.p0[0][0])
+            # gamma=self.p0[1],
+            # h=self.p0[2], theta0=torch.tensor(1),
+            # initial_t=self.initial_t, beta=self.p0[3])
         elif len(self.ns) == 2:
-            self.phi, self.phi_inj = dadi_torch.Integration.two_pops(self.phi_initial, self.xx, self.p0.data[-1][0],
-                                                                     nu1=self.p0.data[0][0], nu2=self.p0.data[1][0],
-                                                                     m12=self.p0.data[2][0], m21=self.p0.data[3][0],
-                                                                     gamma1=self.p0.data[4][0], gamma2=self.p0.data[5][0],
-                                                                     h1=self.p0.data[6][0], h2=self.p0.data[7][0],
-                                                                     theta0=self.p0.data[8][0],
-                                                                     initial_t=0, frozen1=False,
-                                                                     frozen2=False, nomut1=False, nomut2=False, enable_cuda_cached=False)
+            self.phi, self.phi_inj = Integration.two_pops(self.phi_initial, self.xx, self.p0.data[-1][0],
+                                                          nu1=self.p0.data[0][0], nu2=self.p0.data[1][0],
+                                                          m12=self.p0.data[2][0], m21=self.p0.data[3][0],
+                                                          gamma1=self.p0.data[4][0], gamma2=self.p0.data[5][0],
+                                                          h1=self.p0.data[6][0], h2=self.p0.data[7][0],
+                                                          theta0=self.p0.data[8][0],
+                                                          initial_t=0, frozen1=False,
+                                                          frozen2=False, nomut1=False, nomut2=False,
+                                                          enable_cuda_cached=False)
         child_logger.info("self.phi={}".format(self.phi))
         child_logger.info("self.phi_inj={}".format(self.phi_inj))
-
 
     def compute_derivatives_dphi(self):
         """
@@ -113,12 +114,12 @@ class AdjointStateMethod(nn.Module):
         """
         self.derivatives['dll_dphi'] = dll_dphi_numeric(self.phi, self.data, self.ns[0], self.xx)
         child_logger.info('dll_dphi_numeric={}\n{}'.format(self.derivatives['dll_dphi'].shape, self.derivatives[
-                                                                'dll_dphi']))
+            'dll_dphi']))
         child_logger.info('dF_dphi={}\n{}'.format(self.derivatives['dF_dphi'].shape, self.derivatives['dF_dphi']))
         self.derivatives['adjoint_field'] = np.multiply(self.derivatives['dF_dphi'].T,
                                                         np.asarray(self.derivatives['dll_dphi']))
         child_logger.info("adjoint_field={}\n{}".format(self.derivatives['adjoint_field'].shape, self.derivatives[
-                                                          'adjoint_field']))
+            'adjoint_field']))
 
     def compute_derivatives_dTheta(self, lr, eval=1):
         child_logger.info("F before backward={},\n{}".format(self.F.shape, self.F))
@@ -130,25 +131,27 @@ class AdjointStateMethod(nn.Module):
                                                                             self.p0.grad))
         child_logger.info("self.F.sum={}, type={}".format(self.F.sum(), type(self.F.sum())))
         child_logger.info("self.derivatives['adjoint_field'].resize_(1, 1) shape {}={}".format(self.derivatives[
-            'adjoint_field'].resize_(1, 1).shape, self.derivatives[
-            'adjoint_field'].resize_(1, 1)))
+                                                                                                   'adjoint_field'].resize_(
+            1, 1).shape, self.derivatives[
+                                                                                                   'adjoint_field'].resize_(
+            1, 1)))
         self.derivatives['dll_dTheta'] = np.matmul(self.p0.grad, self.derivatives[
             'adjoint_field'].resize_(1, 1))
         child_logger.info("self.derivatives['dll_dTheta']={}".format(self.derivatives['dll_dTheta']))
 
     def update_parameters(self, lr, iterations):
         i = 0
-        grad_approx = dadi_torch.Inference.approx_grad_scipy(np.asarray([self.p0.detach().numpy()[0][0],
-                                                                         self.p0.detach().numpy()[1][0]],
-                                                                        dtype=object),
-                                                             self.data, dadi_torch.Demographics1D.two_epoch,
-                                                             self.pts,
-                                                             lower_bound=self.lower_bound,
-                                                             upper_bound=self.upper_bound,
-                                                             verbose=0, flush_delay=0.5, gtol=1e-5, multinom=True,
-                                                             maxiter=None, full_output=False,
-                                                             func_args=[], func_kwargs={}, fixed_params=None,
-                                                             ll_scale=1, output_file=None)
+        grad_approx = Inference.approx_grad_scipy(np.asarray([self.p0.detach().numpy()[0][0],
+                                                              self.p0.detach().numpy()[1][0]],
+                                                             dtype=object),
+                                                  self.data, Demographics1D.two_epoch,
+                                                  self.pts,
+                                                  lower_bound=self.lower_bound,
+                                                  upper_bound=self.upper_bound,
+                                                  verbose=0, flush_delay=0.5, gtol=1e-5, multinom=True,
+                                                  maxiter=None, full_output=False,
+                                                  func_args=[], func_kwargs={}, fixed_params=None,
+                                                  ll_scale=1, output_file=None)
         child_logger.info("grad_approx INIT={}".format(grad_approx))
         child_logger.info("norm2={}".format(np.linalg.norm(self.derivatives['dll_dTheta'])))
         child_logger.info("self.p0.data INIT={}".format(self.p0.data))
@@ -159,17 +162,17 @@ class AdjointStateMethod(nn.Module):
             #                                                                max_norm=1.0)
             child_logger.info("self.p0.data={}".format(self.p0.data))
             child_logger.info("norm2={}".format(np.linalg.norm(self.derivatives['dll_dTheta'])))
-            grad_approx = dadi_torch.Inference.approx_grad_scipy(np.asarray([self.p0.detach().numpy()[0][0],
-                                                                             self.p0.detach().numpy()[1][0]],
-                                                                            dtype=object),
-                                                                 self.data, dadi_torch.Demographics1D.two_epoch,
-                                                                 self.pts,
-                                                                 lower_bound=self.lower_bound,
-                                                                 upper_bound=self.upper_bound,
-                                                                 verbose=0, flush_delay=0.5, gtol=1e-5, multinom=True,
-                                                                 maxiter=None, full_output=False,
-                                                                 func_args=[], func_kwargs={}, fixed_params=None,
-                                                                 ll_scale=1, output_file=None)
+            grad_approx = Inference.approx_grad_scipy(np.asarray([self.p0.detach().numpy()[0][0],
+                                                                  self.p0.detach().numpy()[1][0]],
+                                                                 dtype=object),
+                                                      self.data, Demographics1D.two_epoch,
+                                                      self.pts,
+                                                      lower_bound=self.lower_bound,
+                                                      upper_bound=self.upper_bound,
+                                                      verbose=0, flush_delay=0.5, gtol=1e-5, multinom=True,
+                                                      maxiter=None, full_output=False,
+                                                      func_args=[], func_kwargs={}, fixed_params=None,
+                                                      ll_scale=1, output_file=None)
             child_logger.info("grad_approx={}".format(grad_approx))
             if np.isnan(self.derivatives['dll_dTheta']).any():
                 child_logger.info("nan grad")
@@ -208,5 +211,5 @@ class AdjointStateMethod(nn.Module):
         if np.isclose(self.model * theta, self.data, atol=0.1).all():
             n_c += 1
             child_logger.debug("isclose, n_c={}, with parameters:{}\nLikelihood:{}".
-                                format(n_c, self.p0, self.ll))
+                               format(n_c, self.p0, self.ll))
         return self.p0
